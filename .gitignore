@@ -1,0 +1,57 @@
+# Dependencies
+
+node_modules/
+
+# Logs
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# VS Code
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# OS Files
+
+.DS_Store
+Thumbs.db
+
+# Build / Packaging
+
+*.vsix
+
+# Coverage
+
+coverage/
+.nyc_output/
+
+# TypeScript cache
+
+*.tsbuildinfo
+
+# Environment variables
+
+.env
+.env.*
+
+# Temporary files
+
+*.tmp
+*.temp
+
+# macOS
+
+.AppleDouble
+.LSOverride
+._*
+
+# GitHub Copilot / local caches
+
+.cache/
+dist/
+build/
