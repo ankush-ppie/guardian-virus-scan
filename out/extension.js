@@ -68,6 +68,7 @@ async function runFullScan(workspacePath, progress, token) {
         const result = (0, scanner_1.scanBranch)(workspacePath, branch, currentBranch, projectType);
         results.push(result);
     }
+    const pkg = require('../package.json');
     return {
         workspacePath,
         projectType,
@@ -76,6 +77,7 @@ async function runFullScan(workspacePath, progress, token) {
         remoteBranches,
         branches: results,
         scanDurationMs: Date.now() - start,
+        version: pkg.version,
     };
 }
 // ─── Open a threat file ───────────────────────────────────────────────────────

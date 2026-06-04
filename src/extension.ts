@@ -54,6 +54,8 @@ async function runFullScan(
     results.push(result);
   }
 
+  const pkg = require('../package.json');
+
   return {
     workspacePath,
     projectType,
@@ -62,6 +64,7 @@ async function runFullScan(
     remoteBranches,
     branches: results,
     scanDurationMs: Date.now() - start,
+    version: pkg.version,
   };
 }
 

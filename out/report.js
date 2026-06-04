@@ -2,13 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildReportHtml = buildReportHtml;
 function severityColor(s) {
-    return s === 'critical' ? '#f87171' : s === 'high' ? '#fb923c' : '#fbbf24';
+    return s === 'critical' ? 'var(--red)' : s === 'high' ? 'var(--orange)' : 'var(--yellow)';
 }
 function severityBg(s) {
-    return s === 'critical' ? '#3b0a0a' : s === 'high' ? '#3b1505' : '#3b2000';
+    return s === 'critical' ? 'var(--bg-red-soft)' : s === 'high' ? 'var(--bg-orange-soft)' : 'var(--bg-yellow-soft)';
 }
 function severityBorder(s) {
-    return s === 'critical' ? '#f87171' : s === 'high' ? '#fb923c' : '#fbbf24';
+    return s === 'critical' ? 'var(--border-red)' : s === 'high' ? 'var(--border-orange)' : 'var(--border-yellow)';
 }
 function escHtml(s) {
     return String(s)
@@ -49,7 +49,7 @@ function threatCard(t, branch, uid) {
       <div class="threat-left-bar" style="background:${severityColor(t.severity)}"></div>
       <div class="threat-body">
         <div class="threat-header">
-          <span class="sev-pill" style="background:${severityBg(t.severity)};color:${severityColor(t.severity)};border:1px solid ${severityColor(t.severity)}30">${t.severity.toUpperCase()}</span>
+          <span class="sev-pill" style="background:${severityBg(t.severity)};color:${severityColor(t.severity)};border:1px solid ${severityBorder(t.severity)}">${t.severity.toUpperCase()}</span>
           <code class="rule-code">${escHtml(t.rule)}</code>
           <span class="file-ref">
             <span class="file-ref-icon">📁</span>${escHtml(t.file)}${t.line ? `<span class="file-ref-line">:${t.line}</span>` : ''}
@@ -192,20 +192,30 @@ function buildReportHtml(result) {
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0b0b0d;
-      --bg2:       #101014;
-      --bg3:       #141418;
-      --border:    #1e1e26;
-      --border2:   #26262e;
-      --text:      #e2e2e8;
-      --text2:     #9090a0;
-      --text3:     #50505e;
-      --red:       #f87171;
-      --orange:    #fb923c;
-      --yellow:    #fbbf24;
-      --green:     #4ade80;
-      --blue:      #60a5fa;
-      --purple:    #a78bfa;
+      --bg:        var(--vscode-editor-background, #1e1e1e);
+      --bg2:       var(--vscode-sideBar-background, #252526);
+      --bg3:       var(--vscode-panel-background, #1e1e1e);
+      --border:    var(--vscode-panel-border, #2d2d2d);
+      --border2:   var(--vscode-widget-border, #3c3c3c);
+      --text:      var(--vscode-editor-foreground, #e2e2e8);
+      --text2:     var(--vscode-descriptionForeground, #9090a0);
+      --text3:     var(--vscode-disabledForeground, #50505e);
+      
+      --red:       var(--vscode-errorForeground, #f87171);
+      --orange:    var(--vscode-editorWarning-foreground, #fb923c);
+      --yellow:    var(--vscode-editorInfo-foreground, #fbbf24);
+      --green:     var(--vscode-gitDecoration-addedResourceForeground, #4ade80);
+      --blue:      var(--vscode-textLink-foreground, #60a5fa);
+      --purple:    var(--vscode-gitDecoration-ignoredResourceForeground, #a78bfa);
+      
+      --bg-red-soft: rgba(248, 113, 113, 0.08);
+      --bg-orange-soft: rgba(251, 146, 60, 0.08);
+      --bg-yellow-soft: rgba(251, 191, 36, 0.08);
+      --bg-green-soft: rgba(74, 222, 128, 0.06);
+      
+      --border-red: rgba(248, 113, 113, 0.25);
+      --border-orange: rgba(251, 146, 60, 0.25);
+      --border-yellow: rgba(251, 191, 36, 0.25);
     }
 
     body {
@@ -230,8 +240,8 @@ function buildReportHtml(result) {
     }
     .header-logo {
       width: 28px; height: 28px;
-      background: linear-gradient(135deg, #1e3a5a, #0d2137);
-      border: 1px solid #2a5a8a;
+      background: linear-gradient(135deg, rgba(30, 58, 90, 0.5), rgba(13, 33, 55, 0.5));
+      border: 1px solid var(--border2);
       border-radius: 7px;
       display: flex; align-items: center; justify-content: center;
       font-size: 15px; flex-shrink: 0;
@@ -286,21 +296,21 @@ function buildReportHtml(result) {
       margin: 20px 28px 0;
       padding: 18px 22px;
       border-radius: 12px;
-      border: 1px solid;
+      border: 1px solid var(--border);
       display: flex; align-items: center; gap: 16px;
     }
-    .summary-hero.ok     { background: #071a0f; border-color: #1a4a2a; }
-    .summary-hero.danger { background: #160507; border-color: #5a1a1a; }
-    .summary-hero.warn   { background: #130a02; border-color: #5a2a0a; }
+    .summary-hero.ok     { background: var(--bg-green-soft); border-color: rgba(74, 222, 128, 0.2); }
+    .summary-hero.danger { background: var(--bg-red-soft); border-color: rgba(248, 113, 113, 0.2); }
+    .summary-hero.warn   { background: var(--bg-orange-soft); border-color: rgba(251, 146, 60, 0.2); }
     .hero-icon {
       font-size: 28px; flex-shrink: 0;
       width: 52px; height: 52px;
       display: flex; align-items: center; justify-content: center;
       border-radius: 14px;
     }
-    .summary-hero.ok     .hero-icon { background: #0d2e1a; }
-    .summary-hero.danger .hero-icon { background: #2d0a0a; }
-    .summary-hero.warn   .hero-icon { background: #2a1205; }
+    .summary-hero.ok     .hero-icon { background: rgba(74, 222, 128, 0.12); }
+    .summary-hero.danger .hero-icon { background: rgba(248, 113, 113, 0.12); }
+    .summary-hero.warn   .hero-icon { background: rgba(251, 146, 60, 0.12); }
     .hero-text {}
     .hero-title {
       font-size: 16px; font-weight: 700;
@@ -317,7 +327,7 @@ function buildReportHtml(result) {
     ───────────────────────────────────────────── */
     .branch-overview {
       margin: 16px 28px 0;
-      border: 1px solid var(--border2);
+      border: 1px solid var(--border);
       border-radius: 12px; overflow: hidden;
     }
     .bo-header {
@@ -337,21 +347,21 @@ function buildReportHtml(result) {
       font-size: 10px; font-weight: 600;
       padding: 2px 9px; border-radius: 20px; white-space: nowrap;
     }
-    .bo-chip-current { background: #0d1e36; color: var(--blue);   border: 1px solid #1a3a6a; }
-    .bo-chip-local   { background: #141422; color: var(--purple); border: 1px solid #2a2a52; }
-    .bo-chip-remote  { background: var(--bg3); color: var(--text3); border: 1px solid var(--border2); }
+    .bo-chip-current { background: rgba(55, 148, 255, 0.1); color: var(--blue);   border: 1px solid rgba(55, 148, 255, 0.25); }
+    .bo-chip-local   { background: rgba(167, 139, 250, 0.1); color: var(--purple); border: 1px solid rgba(167, 139, 250, 0.25); }
+    .bo-chip-remote  { background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
     .bo-body { padding: 14px 16px; background: var(--bg2); }
 
     .bo-current-row {
       display: flex; align-items: center; justify-content: space-between;
       padding: 10px 14px; margin-bottom: 14px;
-      background: #0a1420;
-      border: 1px solid #1a3050;
+      background: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.04));
+      border: 1px solid var(--border);
       border-left: 3px solid var(--blue);
       border-radius: 8px;
     }
     .bo-current-left { display: flex; flex-direction: column; gap: 2px; }
-    .bo-current-label { font-size: 9px; font-weight: 700; color: #3a6aaa; text-transform: uppercase; letter-spacing: 0.1em; }
+    .bo-current-label { font-size: 9px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: 0.1em; }
     .bo-current-name  { font-family: 'SF Mono','Cascadia Code','Consolas',monospace; font-size: 14px; font-weight: 700; color: var(--blue); }
 
     .bo-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -363,7 +373,7 @@ function buildReportHtml(result) {
     }
     .bo-col-icon { font-size: 12px; }
     .bo-col-title { font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.07em; flex: 1; }
-    .bo-col-count { font-size: 11px; font-weight: 700; color: var(--text3); background: var(--bg3); padding: 1px 7px; border-radius: 10px; border: 1px solid var(--border2); }
+    .bo-col-count { font-size: 11px; font-weight: 700; color: var(--text3); background: var(--bg3); padding: 1px 7px; border-radius: 10px; border: 1px solid var(--border); }
     .bo-branch-list { padding: 6px 8px; display: flex; flex-direction: column; gap: 1px; }
     .bo-branch-row {
       display: flex; align-items: center; gap: 8px;
@@ -372,13 +382,13 @@ function buildReportHtml(result) {
       font-size: 12px; color: var(--text2);
       transition: background 0.1s;
     }
-    .bo-branch-row:hover { background: var(--bg); }
-    .bo-branch-row.is-current { color: var(--blue); background: #0a1420; }
-    .bo-branch-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 5px currentColor; }
-    .dot-current  { background: var(--blue);   color: var(--blue); }
-    .dot-infected { background: var(--red);    color: var(--red); }
-    .dot-clean    { background: var(--green);  color: var(--green); }
-    .dot-remote   { background: var(--text3);  color: var(--text3); box-shadow: none; }
+    .bo-branch-row:hover { background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.05)); }
+    .bo-branch-row.is-current { color: var(--blue); background: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.04)); }
+    .bo-branch-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .dot-current  { background: var(--blue); }
+    .dot-infected { background: var(--red); }
+    .dot-clean    { background: var(--green); }
+    .dot-remote   { background: var(--text3); }
     .bo-branch-name-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bo-inline-badge { margin-left: auto; flex-shrink: 0; }
     .bo-star { color: var(--blue); font-size: 10px; }
@@ -402,9 +412,9 @@ function buildReportHtml(result) {
       font-size: 10px; font-weight: 700;
       padding: 1px 8px; border-radius: 10px;
     }
-    .section-count.red    { background: #2a0a0a; color: var(--red);   border: 1px solid #5a1a1a; }
-    .section-count.green  { background: #0a2a14; color: var(--green); border: 1px solid #1a5a2a; }
-    .section-count.muted  { background: var(--bg3); color: var(--text3); border: 1px solid var(--border2); }
+    .section-count.red    { background: var(--bg-red-soft); color: var(--red);   border: 1px solid var(--border-red); }
+    .section-count.green  { background: var(--bg-green-soft); color: var(--green); border: 1px solid rgba(74, 222, 128, 0.2); }
+    .section-count.muted  { background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
     .section-divider {
       flex: 1; height: 1px; background: var(--border);
     }
@@ -414,26 +424,29 @@ function buildReportHtml(result) {
       border-radius: 10px; margin-bottom: 8px; overflow: hidden;
     }
     .branch-block.infected {
-      border-color: #5a1a1a;
-      box-shadow: 0 0 0 1px #5a1a1a20;
+      border-color: var(--border-red);
     }
-    .branch-block.clean    { border-color: #1a4a2a; }
+    .branch-block.clean    { border-color: rgba(74, 222, 128, 0.2); }
 
     .branch-summary {
       display: flex; align-items: center; gap: 9px;
       padding: 11px 16px; cursor: pointer;
       list-style: none; user-select: none;
+      transition: background 0.1s;
+    }
+    .branch-summary:hover {
+      background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.05));
     }
     .branch-summary::-webkit-details-marker { display: none; }
     details[open] > .branch-summary .branch-chevron { transform: rotate(90deg); }
     .branch-chevron { color: var(--text3); font-size: 8px; transition: transform 0.18s; display: inline-block; flex-shrink: 0; }
-    .branch-block.infected .branch-summary { background: #120606; }
-    .branch-block.clean    .branch-summary { background: #060e09; }
+    .branch-block.infected .branch-summary { background: transparent; }
+    .branch-block.clean    .branch-summary { background: transparent; }
     .branch-icon  { color: var(--text3); flex-shrink: 0; font-size: 13px; }
     .branch-name  { font-weight: 600; color: var(--text); flex: 1; font-size: 13px; min-width: 0;
                     font-family: 'SF Mono','Cascadia Code','Consolas',monospace; }
-    .current-tag  { font-size: 9px; font-weight: 600; background: #0d1e36; color: var(--blue);
-                    border: 1px solid #1a3a6a; border-radius: 4px; padding: 1px 5px; margin-left: 6px;
+    .current-tag  { font-size: 9px; font-weight: 600; background: rgba(55, 148, 255, 0.1); color: var(--blue);
+                    border: 1px solid rgba(55, 148, 255, 0.2); border-radius: 4px; padding: 1px 5px; margin-left: 6px;
                     font-family: -apple-system, sans-serif; text-transform: uppercase; letter-spacing: 0.05em; vertical-align: middle; }
     .branch-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
     .branch-meta  { color: var(--text3); font-size: 10px; white-space: nowrap; }
@@ -442,11 +455,11 @@ function buildReportHtml(result) {
        BADGES
     ───────────────────────────────────────────── */
     .badge { padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.01em; }
-    .badge-red    { background: #2a0808; color: var(--red);    border: 1px solid #6a1a1a; }
-    .badge-orange { background: #2a1205; color: var(--orange); border: 1px solid #6a2a0a; }
-    .badge-yellow { background: #2a1a02; color: var(--yellow); border: 1px solid #6a4a0a; }
-    .badge-green  { background: #082a12; color: var(--green);  border: 1px solid #1a5a2a; }
-    .badge-gray   { background: var(--bg3); color: var(--text3); border: 1px solid var(--border2); }
+    .badge-red    { background: var(--bg-red-soft); color: var(--red);    border: 1px solid var(--border-red); }
+    .badge-orange { background: var(--bg-orange-soft); color: var(--orange); border: 1px solid var(--border-orange); }
+    .badge-yellow { background: var(--bg-yellow-soft); color: var(--yellow); border: 1px solid var(--border-yellow); }
+    .badge-green  { background: var(--bg-green-soft); color: var(--green);  border: 1px solid rgba(74, 222, 128, 0.2); }
+    .badge-gray   { background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
 
     /* ─────────────────────────────────────────────
        THREAT CARDS
@@ -474,10 +487,10 @@ function buildReportHtml(result) {
     }
     .rule-code {
       font-family: 'SF Mono','Cascadia Code','Consolas',monospace;
-      font-size: 11px; color: #9cdcfe;
-      background: #0f1e2e; padding: 2px 8px;
+      font-size: 11px; color: var(--vscode-textLink-foreground, var(--blue));
+      background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.06)); padding: 2px 8px;
       border-radius: 5px; white-space: nowrap;
-      border: 1px solid #1a3a5a;
+      border: 1px solid var(--border);
     }
     .file-ref {
       font-family: 'SF Mono','Cascadia Code','Consolas',monospace;
@@ -496,25 +509,25 @@ function buildReportHtml(result) {
       display: flex; align-items: center; gap: 5px;
       font-size: 11px; font-weight: 600;
       padding: 4px 11px; border-radius: 6px;
-      cursor: pointer; border: 1px solid;
+      cursor: pointer; border: 1px solid transparent;
       white-space: nowrap;
       transition: all 0.12s;
       position: relative; z-index: 5;
       letter-spacing: 0.01em;
     }
     .btn-icon { font-size: 11px; }
-    .code-btn         { background: #0f1e2e; color: #9cdcfe; border-color: #1a3a5a; }
-    .code-btn:hover   { background: #142840; border-color: #2a5a8a; }
-    .code-btn.active  { background: #0d2a42; color: #4fc1ff; border-color: #2a6aaa; }
-    .open-btn         { background: #0a1e0a; color: #6dbf67; border-color: #1a4a1a; }
-    .open-btn:hover   { background: #0d280d; border-color: #2a6a2a; }
+    .code-btn         { background: var(--vscode-button-secondaryBackground, #3a3d3e); color: var(--vscode-button-secondaryForeground, #ffffff); border-color: var(--border); }
+    .code-btn:hover   { background: var(--vscode-button-secondaryHoverBackground, #45494a); }
+    .code-btn.active  { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #ffffff); }
+    .open-btn         { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #ffffff); }
+    .open-btn:hover   { background: var(--vscode-button-hoverBackground, #1177bb); }
 
     /* ─────────────────────────────────────────────
        CODE SNIPPET
     ───────────────────────────────────────────── */
     .snippet-wrap {
       display: none; margin-top: 10px;
-      border: 1px solid var(--border2); border-radius: 8px; overflow: hidden;
+      border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
     }
     .snippet-wrap.open { display: block; }
     .snippet-toolbar {
@@ -525,7 +538,7 @@ function buildReportHtml(result) {
     .snippet-label { font-family: 'SF Mono','Cascadia Code','Consolas',monospace; font-size: 10px; color: var(--text3); }
     .snippet-pre {
       margin: 0; padding: 12px 14px;
-      background: #070709; overflow-x: auto;
+      background: var(--vscode-editor-background, #1e1e1e); overflow-x: auto;
       font-family: 'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;
       font-size: 12px; line-height: 1.7; color: var(--text);
       white-space: pre; max-height: 340px; overflow-y: auto;
@@ -534,7 +547,7 @@ function buildReportHtml(result) {
     .clean-msg {
       display: flex; align-items: center; gap: 8px;
       padding: 12px 16px; color: var(--green); font-size: 12px;
-      border-top: 1px solid var(--border); background: #060e09;
+      border-top: 1px solid var(--border); background: var(--bg-green-soft);
     }
     .clean-icon { font-size: 14px; }
     .error-msg { padding: 12px 16px; color: var(--orange); font-size: 12px; border-top: 1px solid var(--border); }
@@ -543,24 +556,24 @@ function buildReportHtml(result) {
        PROJECT BADGE
     ───────────────────────────────────────────── */
     .proj-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px; flex-shrink: 0; letter-spacing: 0.03em; }
-    .proj-flutter { background: #0a1e38; color: #54c5f8; border: 1px solid #1a4a7a; }
-    .proj-node    { background: #0a1e0a; color: #6dbf67; border: 1px solid #1a4a1a; }
-    .proj-python  { background: #1e1800; color: #f5c518; border: 1px solid #4a3a00; }
-    .proj-generic { background: var(--bg3); color: var(--text3); border: 1px solid var(--border2); }
+    .proj-flutter { background: rgba(84, 197, 248, 0.1); color: #54c5f8; border: 1px solid rgba(84, 197, 248, 0.25); }
+    .proj-node    { background: rgba(109, 191, 103, 0.1); color: #6dbf67; border: 1px solid rgba(109, 191, 103, 0.25); }
+    .proj-python  { background: rgba(245, 197, 24, 0.1); color: #f5c518; border: 1px solid rgba(245, 197, 24, 0.25); }
+    .proj-generic { background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
 
     /* ─────────────────────────────────────────────
        RESCAN BUTTON
     ───────────────────────────────────────────── */
     .rescan-btn {
       display: flex; align-items: center; gap: 6px;
-      background: var(--bg3); color: var(--text2);
-      border: 1px solid var(--border2);
+      background: var(--vscode-button-secondaryBackground, #3a3d3e); color: var(--vscode-button-secondaryForeground, #ffffff);
+      border: 1px solid var(--border);
       padding: 6px 14px; border-radius: 7px; cursor: pointer;
       font-size: 12px; font-weight: 600; white-space: nowrap;
       margin-left: auto;
       transition: all 0.12s;
     }
-    .rescan-btn:hover { background: var(--bg2); border-color: #3a3a4e; color: var(--text); }
+    .rescan-btn:hover { background: var(--vscode-button-secondaryHoverBackground, #45494a); border-color: var(--vscode-focusBorder); }
 
     /* ─────────────────────────────────────────────
        FOOTER
@@ -570,10 +583,10 @@ function buildReportHtml(result) {
       display: flex; align-items: center; gap: 12px;
       color: var(--text3); font-size: 11px;
     }
-    .footer-dot { color: var(--border2); }
+    .footer-dot { color: var(--border); }
     .footer-badge {
       background: var(--bg3); color: var(--text3);
-      border: 1px solid var(--border2);
+      border: 1px solid var(--border);
       padding: 2px 8px; border-radius: 4px;
       font-size: 10px; font-weight: 600;
     }
@@ -673,7 +686,7 @@ ${buildBranchOverview(result)}
 </div>
 
 <div class="footer">
-  <span class="footer-badge">Guardian v1.0</span>
+  <span class="footer-badge">Guardian v${result.version || '1.0.2'}</span>
   <span class="footer-dot">·</span>
   Scanned ${result.branches.length} branch${result.branches.length !== 1 ? 'es' : ''}
   <span class="footer-dot">·</span>
@@ -722,7 +735,7 @@ ${buildBranchOverview(result)}
         const isFlagged = line.trimStart().startsWith('▶');
         const escaped = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         return isFlagged
-          ? '<span style="display:block;background:#0f2a08;color:#86efac;width:100%;border-left:2px solid #4ade80;padding-left:6px">' + escaped + '</span>'
+          ? '<span style="display:block;background:var(--vscode-editor-lineHighlightBackground, rgba(128,128,128,0.1));color:var(--green);border-left:2px solid var(--green);padding-left:6px">' + escaped + '</span>'
           : '<span style="display:block;width:100%">' + escaped + '</span>';
       }).join('');
       pre.innerHTML = html;

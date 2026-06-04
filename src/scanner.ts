@@ -32,6 +32,7 @@ export interface WorkspaceScanResult {
   remoteBranches?: string[];
   branches: BranchScanResult[];
   scanDurationMs: number;
+  version?: string;
 }
 
 // ─── Git helpers ──────────────────────────────────────────────────────────────
