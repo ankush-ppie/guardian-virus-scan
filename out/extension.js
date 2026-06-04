@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = require("vscode");
-const scanner_1 = require("./scanner");
-const report_1 = require("./report");
+const { isGitRepo, getCurrentBranch, getAllLocalBranches, getAllRemoteBranches, detectProjectType, scanBranch } = require('./scanner');
+const { buildReportHtml } = require('./report');
 const path = require("path");
 const child_process_1 = require("child_process");
 
@@ -14,21 +14,30 @@ let latestResult;
 // ─── Core: scan all branches ──────────────────────────────────────────────────
 async function runFullScan(workspacePath, progress, token) {
     const start = Date.now();
-    if (!(0, scanner_1.isGitRepo)(workspacePath)) throw new Error('Not a git repository.');
-    const currentBranch = (0, scanner_1.getCurrentBranch)(workspacePath);
-    const branches = (0, scanner_1.getAllLocalBranches)(workspacePath);
+    if (!isGitRepo(workspacePath)) throw new Error('Not a git repository.');
+    const currentBranch = getCurrentBranch(workspacePath);
+    const branches = getAllLocalBranches(workspacePath);
+    const remoteBranches = getAllRemoteBranches(workspacePath);
     if (branches.length === 0) throw new Error('No local branches found.');
     const detectFrom = branches.includes(currentBranch) ? currentBranch : branches[0];
-    const projectType = (0, scanner_1.detectProjectType)(workspacePath, detectFrom);
+    const projectType = detectProjectType(workspacePath, detectFrom);
     const results = [];
     const step = 100 / branches.length;
     for (let i = 0; i < branches.length; i++) {
         if (token.isCancellationRequested) break;
         const branch = branches[i];
         progress.report({ message: `Scanning branch ${i + 1}/${branches.length}: ${branch}`, increment: step });
-        results.push((0, scanner_1.scanBranch)(workspacePath, branch, currentBranch, projectType));
+        results.push(scanBranch(workspacePath, branch, currentBranch, projectType));
     }
-    return { workspacePath, projectType, branches: results, scanDurationMs: Date.now() - start };
+    return {
+        workspacePath,
+        projectType,
+        currentBranch,
+        localBranches: branches,
+        remoteBranches,
+        branches: results,
+        scanDurationMs: Date.now() - start,
+    };
 }
 
 // ─── Open a threat file ───────────────────────────────────────────────────────
@@ -102,7 +111,7 @@ function showReport(result, context) {
         // Panel exists — update content only, listener stays registered from creation
         latestResult = result;
         reportPanel.title = title;
-        reportPanel.webview.html = (0, report_1.buildReportHtml)(result);
+        reportPanel.webview.html = buildReportHtml(result);
         reportPanel.reveal(vscode.ViewColumn.One);
         return;
     }
@@ -115,7 +124,7 @@ function showReport(result, context) {
         { enableScripts: true, retainContextWhenHidden: true }
     );
     reportPanel.onDidDispose(() => { reportPanel = undefined; });
-    reportPanel.webview.html = (0, report_1.buildReportHtml)(result);
+    reportPanel.webview.html = buildReportHtml(result);
 
     // Register listener ONCE — reads latestResult so it's always fresh
     reportPanel.webview.onDidReceiveMessage(async (msg) => {
