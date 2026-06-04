@@ -36,7 +36,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.isGitRepo = isGitRepo;
 exports.getCurrentBranch = getCurrentBranch;
 exports.getAllLocalBranches = getAllLocalBranches;
-exports.getAllRemoteBranches = getAllRemoteBranches;
 exports.readFileFromBranch = readFileFromBranch;
 exports.readBinaryFromBranch = readBinaryFromBranch;
 exports.listFilesInBranch = listFilesInBranch;
@@ -72,21 +71,6 @@ function getAllLocalBranches(workspacePath) {
             cwd: workspacePath, stdio: 'pipe'
         }).toString().trim();
         return raw.split('\n').map(b => b.trim().replace(/^"|"$/g, '')).filter(Boolean);
-    }
-    catch {
-        return [];
-    }
-}
-function getAllRemoteBranches(workspacePath) {
-    try {
-        const raw = (0, child_process_1.execSync)('git branch -r --format="%(refname:short)"', {
-            cwd: workspacePath, stdio: 'pipe'
-        }).toString().trim();
-        return raw
-            .split('\n')
-            .map(b => b.trim().replace(/^"|"$/g, ''))
-            .filter(b => b && !b.endsWith('/HEAD')) // drop remote HEAD pointers
-            .filter(Boolean);
     }
     catch {
         return [];

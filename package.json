@@ -4,11 +4,35 @@
 	"description": "Scans all local git branches for malicious .vscode configs, fake font files, and injected code before they execute.",
 	"version": "1.0.0",
 	"publisher": "guardian-security",
+	"license": "MIT",
+	"icon": "media/icon.png",
+	"galleryBanner": {
+		"color": "#0B0F19",
+		"theme": "dark"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/ankush-ppie/guardian-virus-scan.git"
+	},
+	"bugs": {
+		"url": "https://github.com/ankush-ppie/guardian-virus-scan/issues"
+	},
+	"homepage": "https://github.com/ankush-ppie/guardian-virus-scan#readme",
 	"engines": {
 		"vscode": "^1.85.0"
 	},
 	"categories": [
+		"Linters",
 		"Other"
+	],
+	"keywords": [
+		"security",
+		"virus",
+		"malicious",
+		"scan",
+		"git",
+		"branch",
+		"vscode-security"
 	],
 	"activationEvents": [
 		"onStartupFinished"

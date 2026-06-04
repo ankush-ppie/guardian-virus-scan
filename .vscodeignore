@@ -1,0 +1,20 @@
+# Exclude git files
+.git/**
+.gitattributes
+.gitignore
+
+# Exclude VS Code configurations
+.vscode/**
+
+# Exclude packaging files
+.vscodeignore
+.vsixmanifest
+
+# Exclude TypeScript source code and build maps
+src/**
+tsconfig.json
+out/**/*.map
+
+# Miscellaneous
+.DS_Store
+package-lock.json
