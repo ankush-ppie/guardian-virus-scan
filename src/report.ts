@@ -10,8 +10,8 @@ function severityBg(s: string): string {
 
 function branchStatusBadge(result: BranchScanResult): string {
   const critical = result.threats.filter(t => t.severity === 'critical').length;
-  const high     = result.threats.filter(t => t.severity === 'high').length;
-  const medium   = result.threats.filter(t => t.severity === 'medium').length;
+  const high = result.threats.filter(t => t.severity === 'high').length;
+  const medium = result.threats.filter(t => t.severity === 'medium').length;
 
   if (result.error) {
     return `<span class="badge badge-gray">Error reading branch</span>`;
@@ -88,11 +88,11 @@ function branchSection(r: BranchScanResult): string {
 export function buildReportHtml(result: WorkspaceScanResult): string {
   const totalThreats = result.branches.reduce((n, b) => n + b.threats.length, 0);
   const infectedBranches = result.branches.filter(b => b.threats.length > 0);
-  const cleanBranches    = result.branches.filter(b => b.threats.length === 0 && !b.error);
-  const criticalCount    = result.branches.reduce((n, b) => n + b.threats.filter(t => t.severity === 'critical').length, 0);
+  const cleanBranches = result.branches.filter(b => b.threats.length === 0 && !b.error);
+  const criticalCount = result.branches.reduce((n, b) => n + b.threats.filter(t => t.severity === 'critical').length, 0);
 
   const summaryColor = totalThreats === 0 ? '#4ade80' : criticalCount > 0 ? '#f87171' : '#fb923c';
-  const summaryText  = totalThreats === 0
+  const summaryText = totalThreats === 0
     ? '✓ All branches are clean'
     : `${totalThreats} threat${totalThreats !== 1 ? 's' : ''} across ${infectedBranches.length} branch${infectedBranches.length !== 1 ? 'es' : ''}`;
 
