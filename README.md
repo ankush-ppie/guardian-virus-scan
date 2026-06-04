@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/visual-studio-marketplace/v/guardian-security.guardian-virus-scan?style=flat-square&color=38bdf8" alt="Version" />
+  <img src="https://img.shields.io/visual-studio-marketplace/v/ankushlokhande.guardian-virus-scan?style=flat-square&color=38bdf8" alt="Version" />
   <img src="https://img.shields.io/github/license/ankush-ppie/guardian-virus-scan?style=flat-square&color=34d399" alt="License" />
-  <img src="https://img.shields.io/visual-studio-marketplace/d/guardian-security.guardian-virus-scan?style=flat-square&color=f472b6" alt="Downloads" />
+  <img src="https://img.shields.io/visual-studio-marketplace/d/ankushlokhande.guardian-virus-scan?style=flat-square&color=f472b6" alt="Downloads" />
 </p>
 
 ---

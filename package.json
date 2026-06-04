@@ -3,7 +3,7 @@
 	"displayName": "Guardian Virus Scan",
 	"description": "Scans all local git branches for malicious .vscode configs, fake font files, and injected code before they execute.",
 	"version": "1.0.0",
-	"publisher": "guardian-security",
+	"publisher": "ankushlokhande",
 	"license": "MIT",
 	"icon": "media/icon.png",
 	"galleryBanner": {
