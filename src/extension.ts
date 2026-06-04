@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import {
   isGitRepo,
   getAllLocalBranches,
+  getAllRemoteBranches,
   getCurrentBranch,
   detectProjectType,
   scanBranch,
@@ -10,6 +11,7 @@ import {
 import { buildReportHtml } from './report';
 
 let reportPanel: vscode.WebviewPanel | undefined;
+let latestResult: WorkspaceScanResult | undefined;
 
 // ─── Core: scan all branches in a workspace ───────────────────────────────────
 
@@ -26,6 +28,7 @@ async function runFullScan(
 
   const currentBranch = getCurrentBranch(workspacePath);
   const branches = getAllLocalBranches(workspacePath);
+  const remoteBranches = getAllRemoteBranches(workspacePath);
 
   if (branches.length === 0) {
     throw new Error('No local branches found.');
@@ -54,9 +57,79 @@ async function runFullScan(
   return {
     workspacePath,
     projectType,
+    currentBranch,
+    localBranches: branches,
+    remoteBranches,
     branches: results,
     scanDurationMs: Date.now() - start,
   };
+}
+
+// ─── Open a threat file ───────────────────────────────────────────────────────
+// ALWAYS reads from the infected branch via `git show branch:file`.
+// Never switches branches. Never opens the disk file (which may be the clean
+// version on the current branch). The file opens as a read-only virtual doc
+// labelled [branch] filename so the user knows exactly what they are viewing.
+async function openThreatFile(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  file: string,
+  line: number,
+  branch: string
+) {
+  const targetLine = Math.max(0, (line || 1) - 1);
+
+  try {
+    const gitPath = file.replace(/\\/g, '/');
+
+    // Read the infected file content from the infected branch — never from disk
+    const { execSync } = require('child_process');
+    const raw = execSync(`git show "${branch}":"${gitPath}"`, {
+      cwd: workspaceRoot, stdio: 'pipe', maxBuffer: 5 * 1024 * 1024,
+    }).toString('utf8');
+
+    // Virtual URI: guardian-branch:/main/.vscode/settings.json
+    // Each branch+file combo gets its own URI so multiple files can be open
+    const scheme = 'guardian-branch';
+    const uri = vscode.Uri.parse(
+      `${scheme}:/${encodeURIComponent(branch)}/${file.replace(/\\/g, '/')}`
+    );
+
+    // Register (or re-register) the content provider for this URI
+    const disposable = vscode.workspace.registerTextDocumentContentProvider(scheme, {
+      provideTextDocumentContent: () => raw,
+    });
+    context.subscriptions.push(disposable);
+
+    const doc = await vscode.workspace.openTextDocument(uri);
+    const editor = await vscode.window.showTextDocument(doc, {
+      preview: false,
+      viewColumn: vscode.ViewColumn.Beside,
+    });
+
+    // Jump to the infected line
+    const range = new vscode.Range(targetLine, 0, targetLine, 999);
+    editor.selection = new vscode.Selection(range.start, range.end);
+    editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+
+    // Show a clear notice — different message for tasks.json (highest risk file)
+    const isTasksFile = file.toLowerCase().includes('tasks.json');
+    if (isTasksFile) {
+      vscode.window.showWarningMessage(
+        `🛡️ Guardian: Viewing "${file}" from branch "${branch}" (read-only). ` +
+        `This file contains auto-run tasks but is safe to view — it is NOT loaded as a workspace config.`
+      );
+    } else {
+      vscode.window.showInformationMessage(
+        `🛡️ Guardian: Viewing "${file}" from branch "${branch}" (read-only). Your current branch is unchanged.`
+      );
+    }
+
+  } catch (e: any) {
+    vscode.window.showErrorMessage(
+      `Guardian: Could not read "${file}" from branch "${branch}" — ${e.message}`
+    );
+  }
 }
 
 // ─── Show / refresh the report panel ─────────────────────────────────────────
@@ -66,76 +139,45 @@ function showReport(
   context: vscode.ExtensionContext
 ) {
   const infectedCount = result.branches.filter(b => b.threats.length > 0).length;
+  const title = infectedCount > 0
+    ? `🛡️ Guardian — ${infectedCount} branch${infectedCount !== 1 ? 'es' : ''} infected`
+    : '🛡️ Guardian — All branches clean';
 
   if (reportPanel) {
+    latestResult = result;
+    reportPanel.title = title;
+    reportPanel.webview.html = buildReportHtml(result);
     reportPanel.reveal(vscode.ViewColumn.One);
-  } else {
-    reportPanel = vscode.window.createWebviewPanel(
-      'guardianReport',
-      infectedCount > 0
-        ? `🛡️ Guardian — ${infectedCount} branch${infectedCount !== 1 ? 'es' : ''} infected`
-        : '🛡️ Guardian — All branches clean',
-      vscode.ViewColumn.One,
-      { enableScripts: true, retainContextWhenHidden: true }
-    );
-    reportPanel.onDidDispose(() => { reportPanel = undefined; });
+    return;
   }
 
+  // Create panel fresh
+  reportPanel = vscode.window.createWebviewPanel(
+    'guardianReport',
+    title,
+    vscode.ViewColumn.One,
+    { enableScripts: true, retainContextWhenHidden: true }
+  );
+  reportPanel.onDidDispose(() => { reportPanel = undefined; });
   reportPanel.webview.html = buildReportHtml(result);
 
+  // Register listener ONCE — reads latestResult so it's always fresh
   reportPanel.webview.onDidReceiveMessage(
     async (msg) => {
       if (msg.action === 'rescan') {
         vscode.commands.executeCommand('guardian.scanAllBranches');
+        return;
       }
 
       if (msg.action === 'openFile') {
-        const { file, line, branch } = msg as { file: string; line: number; branch: string };
-
-        // If the threat is on the current branch, open directly from disk.
-        // Otherwise write a temp read-only buffer from `git show`.
-        const workspaceRoot = result.workspacePath;
-        const absPath = vscode.Uri.file(
-          require('path').join(workspaceRoot, file)
-        );
-
-        try {
-          const doc = await vscode.workspace.openTextDocument(absPath);
-          const editor = await vscode.window.showTextDocument(doc, { preview: false });
-          // Jump to threat line (0-based in VS Code API)
-          const targetLine = Math.max(0, (line ?? 1) - 1);
-          const range = new vscode.Range(targetLine, 0, targetLine, 999);
-          editor.selection = new vscode.Selection(range.start, range.end);
-          editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
-        } catch {
-          // File not on disk (different branch) — show the content in a virtual doc
-          try {
-            const { execSync } = require('child_process');
-            const gitPath = file.replace(/\\/g, '/');
-            const raw = execSync(`git show "${branch}":"${gitPath}"`, {
-              cwd: workspaceRoot, stdio: 'pipe', maxBuffer: 5 * 1024 * 1024,
-            }).toString('utf8');
-
-            // Register a one-time content provider for this virtual file
-            const scheme = 'guardian-branch';
-            const uri = vscode.Uri.parse(`${scheme}:/${branch}/${file}`);
-
-            // Use a disposable provider registered just for this uri
-            const provider = new class implements vscode.TextDocumentContentProvider {
-              provideTextDocumentContent() { return raw; }
-            }();
-            const disposable = vscode.workspace.registerTextDocumentContentProvider(scheme, provider);
-            context.subscriptions.push(disposable);
-
-            const doc = await vscode.workspace.openTextDocument(uri);
-            const editor = await vscode.window.showTextDocument(doc, { preview: false });
-            const targetLine = Math.max(0, (line ?? 1) - 1);
-            const range = new vscode.Range(targetLine, 0, targetLine, 999);
-            editor.selection = new vscode.Selection(range.start, range.end);
-            editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
-          } catch (e: any) {
-            vscode.window.showErrorMessage(`Guardian: Could not open file — ${e.message}`);
-          }
+        if (latestResult) {
+          await openThreatFile(
+            context,
+            latestResult.workspacePath,
+            msg.file,
+            msg.line,
+            msg.branch
+          );
         }
       }
     },
@@ -165,6 +207,7 @@ export function activate(context: vscode.ExtensionContext) {
             return;
           }
 
+          latestResult = result;
           showReport(result, context);
 
           // Status bar summary

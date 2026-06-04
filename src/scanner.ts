@@ -27,6 +27,9 @@ export interface BranchScanResult {
 export interface WorkspaceScanResult {
   workspacePath: string;
   projectType: ProjectType;
+  currentBranch?: string;
+  localBranches?: string[];
+  remoteBranches?: string[];
   branches: BranchScanResult[];
   scanDurationMs: number;
 }
@@ -56,6 +59,19 @@ export function getAllLocalBranches(workspacePath: string): string[] {
       cwd: workspacePath, stdio: 'pipe'
     }).toString().trim();
     return raw.split('\n').map(b => b.trim().replace(/^"|"$/g, '')).filter(Boolean);
+  } catch { return []; }
+}
+
+export function getAllRemoteBranches(workspacePath: string): string[] {
+  try {
+    const raw = execSync('git branch -r --format="%(refname:short)"', {
+      cwd: workspacePath, stdio: 'pipe'
+    }).toString().trim();
+    return raw
+      .split('\n')
+      .map(b => b.trim().replace(/^"|"$/g, ''))
+      .filter(b => b && !b.endsWith('/HEAD'))
+      .filter(Boolean);
   } catch { return []; }
 }
 

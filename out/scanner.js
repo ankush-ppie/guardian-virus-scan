@@ -1,22 +1,22 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function (o, m, k, k2) {
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
     if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function () { return m[k]; } };
+      desc = { enumerable: true, get: function() { return m[k]; } };
     }
     Object.defineProperty(o, k2, desc);
-}) : (function (o, m, k, k2) {
+}) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
 }));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function (o, v) {
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
     Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function (o, v) {
+}) : function(o, v) {
     o["default"] = v;
 });
 var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function (o) {
+    var ownKeys = function(o) {
         ownKeys = Object.getOwnPropertyNames || function (o) {
             var ar = [];
             for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
@@ -85,7 +85,7 @@ function getAllRemoteBranches(workspacePath) {
         return raw
             .split('\n')
             .map(b => b.trim().replace(/^"|"$/g, ''))
-            .filter(b => b && !b.endsWith('/HEAD')) // drop remote HEAD pointers
+            .filter(b => b && !b.endsWith('/HEAD'))
             .filter(Boolean);
     }
     catch {
@@ -171,10 +171,10 @@ function extractSnippet(content, targetLine, context = 5) {
     return lines
         .slice(start, end + 1)
         .map((l, i) => {
-            const lineNo = start + i + 1;
-            const marker = lineNo === targetLine ? '▶' : ' ';
-            return `${marker} ${String(lineNo).padStart(4, ' ')}  ${l}`;
-        })
+        const lineNo = start + i + 1;
+        const marker = lineNo === targetLine ? '▶' : ' ';
+        return `${marker} ${String(lineNo).padStart(4, ' ')}  ${l}`;
+    })
         .join('\n');
 }
 /**
@@ -334,8 +334,7 @@ function scanGitignore(content, filePath) {
     for (const { rx, sev, rule, detail } of checks) {
         if (rx.test(content)) {
             const line = findLine(content, rx);
-            threats.push({
-                severity: sev, file: filePath, rule, detail, line: line || undefined,
+            threats.push({ severity: sev, file: filePath, rule, detail, line: line || undefined,
                 snippet: line ? extractSnippet(content, line) : undefined,
             });
         }

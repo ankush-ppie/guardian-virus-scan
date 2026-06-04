@@ -1,52 +1,50 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildReportHtml = buildReportHtml;
-
 function severityColor(s) {
-  return s === 'critical' ? '#f87171' : s === 'high' ? '#fb923c' : '#fbbf24';
+    return s === 'critical' ? '#f87171' : s === 'high' ? '#fb923c' : '#fbbf24';
 }
 function severityBg(s) {
-  return s === 'critical' ? '#3b0a0a' : s === 'high' ? '#3b1505' : '#3b2000';
+    return s === 'critical' ? '#3b0a0a' : s === 'high' ? '#3b1505' : '#3b2000';
 }
 function severityBorder(s) {
-  return s === 'critical' ? '#f87171' : s === 'high' ? '#fb923c' : '#fbbf24';
+    return s === 'critical' ? '#f87171' : s === 'high' ? '#fb923c' : '#fbbf24';
 }
 function escHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
-
 function branchStatusBadge(result) {
-  const critical = result.threats.filter(t => t.severity === 'critical').length;
-  const high = result.threats.filter(t => t.severity === 'high').length;
-  const medium = result.threats.filter(t => t.severity === 'medium').length;
-  if (result.error) return `<span class="badge badge-gray">⚠ Error</span>`;
-  if (critical > 0) return `<span class="badge badge-red">🔴 ${critical} critical${high ? ` · ${high} high` : ''}</span>`;
-  if (high > 0) return `<span class="badge badge-orange">🟠 ${high} high${medium ? ` · ${medium} medium` : ''}</span>`;
-  if (medium > 0) return `<span class="badge badge-yellow">🟡 ${medium} medium</span>`;
-  return `<span class="badge badge-green">✓ Clean</span>`;
+    const critical = result.threats.filter(t => t.severity === 'critical').length;
+    const high = result.threats.filter(t => t.severity === 'high').length;
+    const medium = result.threats.filter(t => t.severity === 'medium').length;
+    if (result.error)
+        return `<span class="badge badge-gray">⚠ Error</span>`;
+    if (critical > 0)
+        return `<span class="badge badge-red">🔴 ${critical} critical${high ? ` · ${high} high` : ''}</span>`;
+    if (high > 0)
+        return `<span class="badge badge-orange">🟠 ${high} high${medium ? ` · ${medium} medium` : ''}</span>`;
+    if (medium > 0)
+        return `<span class="badge badge-yellow">🟡 ${medium} medium</span>`;
+    return `<span class="badge badge-green">✓ Clean</span>`;
 }
-
 function threatCard(t, branch, uid) {
-  const snippetId = `snip-${uid}`;
-  const btnId = `btn-${uid}`;
-
-  const snippetBlock = t.snippet ? `
+    const snippetId = `snip-${uid}`;
+    const btnId = `btn-${uid}`;
+    const snippetBlock = t.snippet ? `
         <div class="snippet-wrap" id="${snippetId}">
           <div class="snippet-toolbar">
             <span class="snippet-label">📄 ${escHtml(t.file)}${t.line ? `:${t.line}` : ''}</span>
           </div>
           <pre class="snippet-pre" id="pre-${uid}"></pre>
         </div>` : '';
-
-  const snippetData = t.snippet
-    ? `<script type="text/plain" id="data-${uid}">${escHtml(t.snippet)}<\/script>`
-    : '';
-
-  return `
+    const snippetData = t.snippet
+        ? `<script type="text/plain" id="data-${uid}">${escHtml(t.snippet)}<\/script>`
+        : '';
+    return `
     <div class="threat-card" data-sev="${t.severity}">
       <div class="threat-left-bar" style="background:${severityColor(t.severity)}"></div>
       <div class="threat-body">
@@ -58,8 +56,8 @@ function threatCard(t, branch, uid) {
           </span>
           <div class="threat-actions">
             ${t.snippet
-      ? `<button id="${btnId}" class="code-btn" onclick="toggleSnippet(event,'${snippetId}','${btnId}','pre-${uid}','data-${uid}')"><span class="btn-icon">⟨/⟩</span> View Code</button>`
-      : ''}
+        ? `<button id="${btnId}" class="code-btn" onclick="toggleSnippet(event,'${snippetId}','${btnId}','pre-${uid}','data-${uid}')"><span class="btn-icon">⟨/⟩</span> View Code</button>`
+        : ''}
             <button class="open-btn"
               data-file="${escHtml(t.file)}"
               data-line="${t.line ?? 1}"
@@ -73,16 +71,13 @@ function threatCard(t, branch, uid) {
       </div>
     </div>`;
 }
-
 function branchSection(r) {
-  const isClean = r.threats.length === 0 && !r.error;
-  const isInfected = r.threats.length > 0;
-
-  const cards = r.threats
-    .map((t, i) => threatCard(t, r.branch, `${r.branch.replace(/[^a-zA-Z0-9]/g, '_')}_${i}`))
-    .join('');
-
-  return `
+    const isClean = r.threats.length === 0 && !r.error;
+    const isInfected = r.threats.length > 0;
+    const cards = r.threats
+        .map((t, i) => threatCard(t, r.branch, `${r.branch.replace(/[^a-zA-Z0-9]/g, '_')}_${i}`))
+        .join('');
+    return `
   <details class="branch-block ${isInfected ? 'infected' : isClean ? 'clean' : 'error'}" ${isInfected ? 'open' : ''}>
     <summary class="branch-summary">
       <span class="branch-chevron">▶</span>
@@ -98,46 +93,41 @@ function branchSection(r) {
     ${cards}
   </details>`;
 }
-
 function buildBranchOverview(result) {
-  const scanMap = new Map();
-  for (const b of result.branches) scanMap.set(b.branch, b);
-
-  const currentBranch = result.currentBranch || '';
-  const localBranches = result.localBranches || result.branches.map(b => b.branch);
-  const remoteBranches = result.remoteBranches || [];
-
-  const curScan = scanMap.get(currentBranch);
-  const curBadge = curScan ? branchStatusBadge(curScan) : '';
-
-  const localRows = localBranches.map(name => {
-    const scan = scanMap.get(name);
-    const isCurrent = name === currentBranch;
-    const dotClass = isCurrent ? 'dot-current'
-      : scan && scan.threats.length > 0 ? 'dot-infected'
-        : 'dot-clean';
-    const inlineBadge = scan ? `<span class="bo-inline-badge">${branchStatusBadge(scan)}</span>` : '';
-    return `<div class="bo-branch-row${isCurrent ? ' is-current' : ''}">
+    const scanMap = new Map();
+    for (const b of result.branches)
+        scanMap.set(b.branch, b);
+    const currentBranch = result.currentBranch || '';
+    const localBranches = result.localBranches || result.branches.map(b => b.branch);
+    const remoteBranches = result.remoteBranches || [];
+    const curScan = scanMap.get(currentBranch);
+    const curBadge = curScan ? branchStatusBadge(curScan) : '';
+    const localRows = localBranches.map(name => {
+        const scan = scanMap.get(name);
+        const isCurrent = name === currentBranch;
+        const dotClass = isCurrent ? 'dot-current'
+            : scan && scan.threats.length > 0 ? 'dot-infected'
+                : 'dot-clean';
+        const inlineBadge = scan ? `<span class="bo-inline-badge">${branchStatusBadge(scan)}</span>` : '';
+        return `<div class="bo-branch-row${isCurrent ? ' is-current' : ''}">
           <span class="bo-branch-dot ${dotClass}"></span>
           <span class="bo-branch-name-text" title="${escHtml(name)}">${escHtml(name)}${isCurrent ? ' <span class="bo-star">★</span>' : ''}</span>
           ${inlineBadge}
         </div>`;
-  }).join('');
-
-  const remoteRows = remoteBranches.length === 0
-    ? `<div class="bo-empty">No remote branches found</div>`
-    : remoteBranches.map(name => {
-      const slash = name.indexOf('/');
-      const display = slash !== -1
-        ? `<span class="remote-prefix">${escHtml(name.slice(0, slash + 1))}</span>${escHtml(name.slice(slash + 1))}`
-        : escHtml(name);
-      return `<div class="bo-branch-row">
+    }).join('');
+    const remoteRows = remoteBranches.length === 0
+        ? `<div class="bo-empty">No remote branches found</div>`
+        : remoteBranches.map(name => {
+            const slash = name.indexOf('/');
+            const display = slash !== -1
+                ? `<span class="remote-prefix">${escHtml(name.slice(0, slash + 1))}</span>${escHtml(name.slice(slash + 1))}`
+                : escHtml(name);
+            return `<div class="bo-branch-row">
               <span class="bo-branch-dot dot-remote"></span>
               <span class="bo-branch-name-text" title="${escHtml(name)}">${display}</span>
             </div>`;
-    }).join('');
-
-  return `
+        }).join('');
+    return `
 <details class="branch-overview" open>
   <summary class="bo-header">
     <span class="bo-chevron">▶</span>
@@ -179,24 +169,20 @@ function buildBranchOverview(result) {
   </div>
 </details>`;
 }
-
 function buildReportHtml(result) {
-  const totalThreats = result.branches.reduce((n, b) => n + b.threats.length, 0);
-  const infectedBranches = result.branches.filter(b => b.threats.length > 0);
-  const cleanBranches = result.branches.filter(b => b.threats.length === 0 && !b.error);
-  const criticalCount = result.branches.reduce((n, b) => n + b.threats.filter(t => t.severity === 'critical').length, 0);
-  const highCount = result.branches.reduce((n, b) => n + b.threats.filter(t => t.severity === 'high').length, 0);
-  const totalFiles = result.branches.reduce((n, b) => n + b.scannedFiles.length, 0);
-
-  const isClean = totalThreats === 0;
-  const summaryTitle = isClean ? '✓ All branches are clean' : `${totalThreats} threat${totalThreats !== 1 ? 's' : ''} found`;
-  const summarySubtitle = isClean
-    ? `Scanned ${result.branches.length} branch${result.branches.length !== 1 ? 'es' : ''} — no malicious content detected.`
-    : `Across ${infectedBranches.length} infected branch${infectedBranches.length !== 1 ? 'es' : ''}. Do not use infected branches until threats are removed.`;
-
-  const projectBadge = `<span class="proj-badge proj-${result.projectType}">${result.projectType.charAt(0).toUpperCase() + result.projectType.slice(1)}</span>`;
-
-  return `<!DOCTYPE html>
+    const totalThreats = result.branches.reduce((n, b) => n + b.threats.length, 0);
+    const infectedBranches = result.branches.filter(b => b.threats.length > 0);
+    const cleanBranches = result.branches.filter(b => b.threats.length === 0 && !b.error);
+    const criticalCount = result.branches.reduce((n, b) => n + b.threats.filter(t => t.severity === 'critical').length, 0);
+    const highCount = result.branches.reduce((n, b) => n + b.threats.filter(t => t.severity === 'high').length, 0);
+    const totalFiles = result.branches.reduce((n, b) => n + b.scannedFiles.length, 0);
+    const isClean = totalThreats === 0;
+    const summaryTitle = isClean ? '✓ All branches are clean' : `${totalThreats} threat${totalThreats !== 1 ? 's' : ''} found`;
+    const summarySubtitle = isClean
+        ? `Scanned ${result.branches.length} branch${result.branches.length !== 1 ? 'es' : ''} — no malicious content detected.`
+        : `Across ${infectedBranches.length} infected branch${infectedBranches.length !== 1 ? 'es' : ''}. Do not use infected branches until threats are removed.`;
+    const projectBadge = `<span class="proj-badge proj-${result.projectType}">${result.projectType.charAt(0).toUpperCase() + result.projectType.slice(1)}</span>`;
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
