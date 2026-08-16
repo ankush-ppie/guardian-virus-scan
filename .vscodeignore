@@ -19,3 +19,4 @@ out/**/*.test.js
 # Miscellaneous
 .DS_Store
 package-lock.json
+*.vsix
