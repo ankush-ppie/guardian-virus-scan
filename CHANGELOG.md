@@ -2,6 +2,21 @@
 
 All notable changes to the **Guardian Virus Scan** extension will be documented in this file.
 
+## [1.1.0] - 2026-08-16
+
+### Added
+- Scan high-risk files in the working tree, including ignored and untracked workspace files.
+- Scan locally available remote-tracking refs as well as local branches.
+- Add exact detections for both confirmed injected-config loader families.
+- Add the confirmed hidden fake-font folder-open task and fake-font payload signatures.
+- Add the backdate/amend/force-push `config.bat` propagation signature.
+- Add regression tests covering infected and legitimate fixtures.
+
+### Changed
+- Invoke Git without a shell to prevent command injection through crafted refs or paths.
+- Distinguish confirmed fake-font payloads from merely invalid/corrupt font files.
+- Scan nested `.vscode` folders and nested application configs in monorepos.
+
 ## [1.0.0] - 2026-06-04
 
 ### Added

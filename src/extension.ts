@@ -1,4 +1,7 @@
 import * as vscode from 'vscode';
+import { execFileSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   isGitRepo,
   getAllLocalBranches,
@@ -6,12 +9,14 @@ import {
   getCurrentBranch,
   detectProjectType,
   scanBranch,
+  scanWorkingTree,
   WorkspaceScanResult,
 } from './scanner';
 import { buildReportHtml } from './report';
 
 let reportPanel: vscode.WebviewPanel | undefined;
 let latestResult: WorkspaceScanResult | undefined;
+const virtualDocuments = new Map<string, string>();
 
 // ─── Core: scan all branches in a workspace ───────────────────────────────────
 
@@ -30,8 +35,12 @@ async function runFullScan(
   const branches = getAllLocalBranches(workspacePath);
   const remoteBranches = getAllRemoteBranches(workspacePath);
 
-  if (branches.length === 0) {
-    throw new Error('No local branches found.');
+  // Remote-tracking refs are already present in the local Git object database;
+  // scanning them requires no checkout, fetch, or network access.
+  const refsToScan = [...new Set([...branches, ...remoteBranches])];
+
+  if (refsToScan.length === 0) {
+    throw new Error('No local or remote-tracking branches found.');
   }
 
   // Detect project type from current branch (or first available)
@@ -39,14 +48,16 @@ async function runFullScan(
   const projectType = detectProjectType(workspacePath, detectFrom);
 
   const results: WorkspaceScanResult['branches'] = [];
-  const step = 100 / branches.length;
+  progress.report({ message: 'Scanning current working tree (including ignored/untracked security files)' });
+  results.push(scanWorkingTree(workspacePath, currentBranch, projectType));
+  const step = 100 / refsToScan.length;
 
-  for (let i = 0; i < branches.length; i++) {
+  for (let i = 0; i < refsToScan.length; i++) {
     if (token.isCancellationRequested) break;
 
-    const branch = branches[i];
+    const branch = refsToScan[i];
     progress.report({
-      message: `Scanning branch ${i + 1}/${branches.length}: ${branch}`,
+      message: `Scanning ref ${i + 1}/${refsToScan.length}: ${branch}`,
       increment: step,
     });
 
@@ -84,12 +95,23 @@ async function openThreatFile(
 
   try {
     const gitPath = file.replace(/\\/g, '/');
-
-    // Read the infected file content from the infected branch — never from disk
-    const { execSync } = require('child_process');
-    const raw = execSync(`git show "${branch}":"${gitPath}"`, {
-      cwd: workspaceRoot, stdio: 'pipe', maxBuffer: 5 * 1024 * 1024,
-    }).toString('utf8');
+    const isWorkingTree = branch.endsWith(' (working tree)');
+    let raw: string;
+    if (isWorkingTree) {
+      const root = path.resolve(workspaceRoot);
+      const target = path.resolve(root, file);
+      if (target !== root && !target.startsWith(root + path.sep)) {
+        throw new Error('Refusing to read a path outside the workspace.');
+      }
+      raw = fs.readFileSync(target, 'utf8');
+    } else {
+      raw = execFileSync('git', ['show', `${branch}:${gitPath}`], {
+        cwd: workspaceRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 8 * 1024 * 1024,
+        windowsHide: true,
+      }).toString('utf8');
+    }
 
     // Virtual URI: guardian-branch:/main/.vscode/settings.json
     // Each branch+file combo gets its own URI so multiple files can be open
@@ -98,11 +120,7 @@ async function openThreatFile(
       `${scheme}:/${encodeURIComponent(branch)}/${file.replace(/\\/g, '/')}`
     );
 
-    // Register (or re-register) the content provider for this URI
-    const disposable = vscode.workspace.registerTextDocumentContentProvider(scheme, {
-      provideTextDocumentContent: () => raw,
-    });
-    context.subscriptions.push(disposable);
+    virtualDocuments.set(uri.toString(), raw);
 
     const doc = await vscode.workspace.openTextDocument(uri);
     const editor = await vscode.window.showTextDocument(doc, {
@@ -192,6 +210,12 @@ function showReport(
 // ─── Activate ─────────────────────────────────────────────────────────────────
 
 export function activate(context: vscode.ExtensionContext) {
+
+  context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider('guardian-branch', {
+      provideTextDocumentContent: uri => virtualDocuments.get(uri.toString()) ?? '',
+    })
+  );
 
   // Helper: run scan with progress UI
   async function triggerScan(workspacePath: string) {

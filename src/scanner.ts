@@ -1,4 +1,5 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
+import * as fs from 'fs';
 import * as path from 'path';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -24,6 +25,18 @@ export interface BranchScanResult {
   error?: string;
 }
 
+const MAX_GIT_OBJECT_BYTES = 8 * 1024 * 1024;
+
+/** Run Git without a shell so malicious ref or path names cannot inject commands. */
+function runGit(workspacePath: string, args: string[], maxBuffer = MAX_GIT_OBJECT_BYTES): Buffer {
+  return execFileSync('git', args, {
+    cwd: workspacePath,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer,
+    windowsHide: true,
+  });
+}
+
 export interface WorkspaceScanResult {
   workspacePath: string;
   projectType: ProjectType;
@@ -39,35 +52,27 @@ export interface WorkspaceScanResult {
 
 export function isGitRepo(workspacePath: string): boolean {
   try {
-    execSync('git rev-parse --is-inside-work-tree', {
-      cwd: workspacePath, stdio: 'pipe'
-    });
+    runGit(workspacePath, ['rev-parse', '--is-inside-work-tree']);
     return true;
   } catch { return false; }
 }
 
 export function getCurrentBranch(workspacePath: string): string {
   try {
-    return execSync('git rev-parse --abbrev-ref HEAD', {
-      cwd: workspacePath, stdio: 'pipe'
-    }).toString().trim();
+    return runGit(workspacePath, ['rev-parse', '--abbrev-ref', 'HEAD']).toString().trim();
   } catch { return ''; }
 }
 
 export function getAllLocalBranches(workspacePath: string): string[] {
   try {
-    const raw = execSync('git branch --format="%(refname:short)"', {
-      cwd: workspacePath, stdio: 'pipe'
-    }).toString().trim();
+    const raw = runGit(workspacePath, ['branch', '--format=%(refname:short)']).toString().trim();
     return raw.split('\n').map(b => b.trim().replace(/^"|"$/g, '')).filter(Boolean);
   } catch { return []; }
 }
 
 export function getAllRemoteBranches(workspacePath: string): string[] {
   try {
-    const raw = execSync('git branch -r --format="%(refname:short)"', {
-      cwd: workspacePath, stdio: 'pipe'
-    }).toString().trim();
+    const raw = runGit(workspacePath, ['branch', '-r', '--format=%(refname:short)']).toString().trim();
     return raw
       .split('\n')
       .map(b => b.trim().replace(/^"|"$/g, ''))
@@ -88,11 +93,7 @@ export function readFileFromBranch(
   try {
     // Normalize path separators for git (always forward slash)
     const gitPath = filePath.replace(/\\/g, '/');
-    const content = execSync(`git show "${branch}":"${gitPath}"`, {
-      cwd: workspacePath,
-      stdio: 'pipe',
-      maxBuffer: 5 * 1024 * 1024 // 5MB max
-    });
+    const content = runGit(workspacePath, ['show', `${branch}:${gitPath}`]);
     return content.toString('utf8');
   } catch { return null; }
 }
@@ -108,11 +109,7 @@ export function readBinaryFromBranch(
 ): Buffer | null {
   try {
     const gitPath = filePath.replace(/\\/g, '/');
-    const content = execSync(`git show "${branch}":"${gitPath}"`, {
-      cwd: workspacePath,
-      stdio: 'pipe',
-      maxBuffer: 5 * 1024 * 1024
-    });
+    const content = runGit(workspacePath, ['show', `${branch}:${gitPath}`]);
     return content.slice(0, byteCount);
   } catch { return null; }
 }
@@ -123,11 +120,7 @@ export function readBinaryFromBranch(
  */
 export function listFilesInBranch(workspacePath: string, branch: string): string[] {
   try {
-    const raw = execSync(`git ls-tree -r --name-only "${branch}"`, {
-      cwd: workspacePath,
-      stdio: 'pipe',
-      maxBuffer: 10 * 1024 * 1024
-    });
+    const raw = runGit(workspacePath, ['ls-tree', '-r', '--name-only', branch], 20 * 1024 * 1024);
     return raw.toString().trim().split('\n').filter(Boolean);
   } catch { return []; }
 }
@@ -183,6 +176,68 @@ function findLine(content: string, rx: RegExp | string): number {
   return idx === -1 ? 0 : idx + 1;
 }
 
+function threatAt(
+  content: string,
+  file: string,
+  severity: Severity,
+  rule: string,
+  detail: string,
+  marker: RegExp | string
+): Threat {
+  const line = findLine(content, marker);
+  return {
+    severity,
+    file,
+    rule,
+    detail,
+    line: line || undefined,
+    snippet: line ? extractSnippet(content, line) : undefined,
+  };
+}
+
+/** Exact loader families confirmed in the westackai incident. */
+export function scanInjectedConfig(content: string, filePath: string): Threat[] {
+  const paddedLegacyLoader = /\s{100,}global\s*\[\s*['"]!['"]\s*\]\s*=/m.test(content);
+  const legacyFingerprint = /rmcej%otb%/i.test(content);
+  const paddedRequireLoader = /\s{100,}global\.[A-Za-z_$][\w$]*\s*=/m.test(content);
+  const requireBootstrap = /global\.r\s*=\s*require/.test(content);
+  const processSpawn = /(?:\bspawn\b|\\u0073\\u0070\\u0061\\u0077\\u006e)/.test(content);
+  const networkModule = /(?:\bhttps?\b|\\u0068\\u0074\\u0074\\u0070)/.test(content);
+
+  if (paddedLegacyLoader && legacyFingerprint) {
+    return [threatAt(
+      content, filePath, 'critical', 'KNOWN_INJECTED_CONFIG_V1',
+      'Confirmed obfuscated loader appended after a legitimate configuration export (legacy westackai incident fingerprint).',
+      /global\s*\[\s*['"]!['"]\s*\]/
+    )];
+  }
+
+  if (paddedRequireLoader && requireBootstrap && processSpawn && networkModule) {
+    return [threatAt(
+      content, filePath, 'critical', 'KNOWN_INJECTED_CONFIG_V2',
+      'Confirmed padded require/network/process-spawn loader appended to a configuration file.',
+      /global\.[A-Za-z_$][\w$]*\s*=/
+    )];
+  }
+
+  return [];
+}
+
+/** Detect the batch helper used to amend, backdate, and force-push commits. */
+export function scanPropagationScript(content: string, filePath: string): Threat[] {
+  const amendsCommit = /git\s+commit\s+--amend/i.test(content);
+  const forcePushes = /\bpush\s+-(?:uf|fu)\s+origin/i.test(content);
+  const bypassesHooks = /--no-verify/i.test(content);
+  const backdatesSystem = /date\s+%LAST_COMMIT_DATE%/i.test(content) && /time\s+%LAST_COMMIT_TIME%/i.test(content);
+
+  if (!(amendsCommit && forcePushes && bypassesHooks && backdatesSystem)) return [];
+  return [threatAt(
+    content, filePath, 'critical', 'FORCE_PUSH_PROPAGATION_SCRIPT',
+    'Confirmed propagation helper backdates and amends a commit, bypasses hooks, then force-pushes the current branch.',
+    /git\s+commit\s+--amend/i
+  )];
+}
+
 // ─── Threat Rules ─────────────────────────────────────────────────────────────
 
 /**
@@ -196,11 +251,44 @@ const FONT_MAGIC: Record<string, Buffer[]> = {
   '.otf':   [Buffer.from([0x4F, 0x54, 0x54, 0x4F])],
 };
 
+function invalidFontThreat(filePath: string, data: Buffer): Threat {
+  const text = data.toString('utf8');
+  const knownV1 = /global\s*\[\s*['"]!['"]\s*\]\s*=/.test(text) && /rmcej%otb%/i.test(text);
+  const knownV2 = /global\.r\s*=\s*require/.test(text) &&
+    /(?:\bspawn\b|\\u0073\\u0070\\u0061\\u0077\\u006e)/.test(text);
+  const confirmed = knownV1 || knownV2;
+  const preview = text.replace(/\r?\n/g, ' ').trim().slice(0, 70);
+  return {
+    severity: confirmed ? 'critical' : 'high',
+    file: filePath,
+    rule: confirmed ? 'KNOWN_FAKE_FONT_PAYLOAD' : 'INVALID_FONT_MAGIC',
+    detail: confirmed
+      ? `"${path.basename(filePath)}" is a confirmed JavaScript loader disguised as a font file.`
+      : `"${path.basename(filePath)}" has invalid font magic bytes. It may be corrupt or a disguised payload and requires review.`,
+    snippet: preview ? `▶    1  ${preview}` : undefined,
+  };
+}
+
 // Rules: tasks.json
 function scanTasksJson(content: string, filePath: string): Threat[] {
   const threats: Threat[] = [];
+
+  // This composite signature remains effective even if tasks.json is JSONC or
+  // deliberately malformed so JSON.parse cannot hide the known payload.
+  const folderOpen = /["']runOn["']\s*:\s*["']folderOpen["']/i.test(content);
+  const fakeFontCommand = /\bnode(?:\.exe)?\s+(?:["']?\.\/?)*public\/fonts\/fa-solid-400\.woff2/i.test(content);
+  const hiddenPresentation = /["']reveal["']\s*:\s*["']never["']/i.test(content) &&
+    (/["']hide["']\s*:\s*true/i.test(content) || /["']echo["']\s*:\s*false/i.test(content));
+  if (folderOpen && fakeFontCommand && hiddenPresentation) {
+    threats.push(threatAt(
+      content, filePath, 'critical', 'KNOWN_FAKE_FONT_AUTORUN_TASK',
+      'Confirmed hidden folder-open task executes public/fonts/fa-solid-400.woff2 with Node.',
+      /folderOpen/i
+    ));
+  }
+
   let parsed: any;
-  try { parsed = JSON.parse(content); } catch { return []; }
+  try { parsed = JSON.parse(content); } catch { return threats; }
 
   const tasks: any[] = parsed.tasks ?? [];
 
@@ -404,21 +492,111 @@ function checkFontMagic(
   const isValid = magicList.some(magic => buf.slice(0, 4).equals(magic));
   if (isValid) return null;
 
-  // Try to read a text preview (disguised JS/script)
-  let preview = '';
+  const sample = readBinaryFromBranch(workspacePath, branch, filePath, 16 * 1024) ?? buf;
+  return invalidFontThreat(filePath, sample);
+}
+
+function checkWorkingTreeFont(filePath: string, relativePath: string): Threat | null {
+  const ext = path.extname(relativePath).toLowerCase();
+  const magicList = FONT_MAGIC[ext];
+  if (!magicList) return null;
+
   try {
-    const full = readBinaryFromBranch(workspacePath, branch, filePath, 120);
-    if (full) preview = full.toString('utf8').replace(/\r?\n/g, ' ').slice(0, 70);
-  } catch {}
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      const buf = Buffer.alloc(16 * 1024);
+      const bytesRead = fs.readSync(fd, buf, 0, buf.length, 0);
+      const data = buf.subarray(0, bytesRead);
+      if (magicList.some(magic => data.subarray(0, 4).equals(magic))) return null;
+      return invalidFontThreat(relativePath, data);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+}
+
+const SKIP_WORKTREE_DIRS = new Set([
+  '.git', 'node_modules', '.next', '.open-next', 'dist', 'build', 'coverage', '.dart_tool',
+]);
+
+/** Scan current on-disk files, including ignored and untracked attack vectors. */
+export function scanWorkingTree(
+  workspacePath: string,
+  currentBranch: string,
+  projectType: ProjectType
+): BranchScanResult {
+  const threats: Threat[] = [];
+  const scannedFiles: string[] = [];
+  const stack = [''];
+  let visited = 0;
+  const maxEntries = 250_000;
+
+  while (stack.length > 0 && visited < maxEntries) {
+    const relativeDir = stack.pop()!;
+    const absoluteDir = path.join(workspacePath, relativeDir);
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(absoluteDir, { withFileTypes: true }); }
+    catch { continue; }
+
+    for (const entry of entries) {
+      visited++;
+      if (visited >= maxEntries) break;
+      if (entry.isSymbolicLink()) continue;
+
+      const relativePath = path.posix.join(relativeDir.replace(/\\/g, '/'), entry.name);
+      const absolutePath = path.join(absoluteDir, entry.name);
+      if (entry.isDirectory()) {
+        if (!SKIP_WORKTREE_DIRS.has(entry.name)) stack.push(relativePath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+
+      const lower = relativePath.toLowerCase();
+      const base = entry.name.toLowerCase();
+      const isVsCodeConfig = /(^|\/)\.vscode\/(tasks|settings|launch)\.json$/i.test(relativePath);
+      const isExecutableConfig = /^(postcss|next|tailwind)\.config\.(js|mjs|cjs|ts)$/i.test(entry.name);
+      const isPropagationScript = base === 'config.bat';
+      const isGitignore = base === '.gitignore';
+      const isFlutterConfig = projectType === 'flutter' && (base === 'pubspec.yaml' || base === 'build.yaml');
+      const isFont = /\.(woff2?|ttf|otf)$/i.test(base) &&
+        (/(^|\/)(public\/fonts|static\/fonts|assets\/fonts|fonts)\//i.test(lower) ||
+          (projectType === 'flutter' && /(^|\/)assets\//i.test(lower)));
+
+      if (isFont) {
+        scannedFiles.push(relativePath);
+        const threat = checkWorkingTreeFont(absolutePath, relativePath);
+        if (threat) threats.push(threat);
+        continue;
+      }
+
+      if (!(isVsCodeConfig || isExecutableConfig || isPropagationScript || isGitignore || isFlutterConfig)) continue;
+      let content: string;
+      try {
+        const stat = fs.statSync(absolutePath);
+        if (stat.size > MAX_GIT_OBJECT_BYTES) continue;
+        content = fs.readFileSync(absolutePath, 'utf8');
+      } catch { continue; }
+
+      scannedFiles.push(relativePath);
+      if (/(^|\/)\.vscode\/tasks\.json$/i.test(relativePath)) threats.push(...scanTasksJson(content, relativePath));
+      else if (/(^|\/)\.vscode\/settings\.json$/i.test(relativePath)) threats.push(...scanSettingsJson(content, relativePath));
+      else if (/(^|\/)\.vscode\/launch\.json$/i.test(relativePath)) threats.push(...scanLaunchJson(content, relativePath));
+      else if (isExecutableConfig) threats.push(...scanInjectedConfig(content, relativePath));
+      else if (isPropagationScript) threats.push(...scanPropagationScript(content, relativePath));
+      else if (isGitignore) threats.push(...scanGitignore(content, relativePath));
+      else if (base === 'pubspec.yaml') threats.push(...scanPubspec(content, relativePath));
+      else if (base === 'build.yaml') threats.push(...scanBuildYaml(content, relativePath));
+    }
+  }
 
   return {
-    severity: 'critical',
-    file: filePath,
-    rule: 'FAKE_FONT_FILE',
-    detail: `"${path.basename(filePath)}" has a font extension but INVALID magic bytes — disguised script detected. Preview: "${preview}"`,
-    snippet: preview
-      ? `▶    1  ${preview}` // binary content — show the text preview as the snippet
-      : undefined,
+    branch: `${currentBranch || 'detached HEAD'} (working tree)`,
+    isCurrentBranch: true,
+    threats,
+    scannedFiles,
+    error: visited >= maxEntries ? `Working-tree scan stopped at the safety limit of ${maxEntries} entries.` : undefined,
   };
 }
 
@@ -444,14 +622,16 @@ export function scanBranch(
   const fileSet = new Set(allFiles);
 
   // ── .vscode files ──────────────────────────────────────────────────────────
-  const vscodeFiles: Array<{ path: string; scanner: (c: string, f: string) => Threat[] }> = [
-    { path: '.vscode/tasks.json',    scanner: scanTasksJson },
-    { path: '.vscode/settings.json', scanner: scanSettingsJson },
-    { path: '.vscode/launch.json',   scanner: scanLaunchJson },
-  ];
+  const vscodeScanners: Record<string, (c: string, f: string) => Threat[]> = {
+    'tasks.json': scanTasksJson,
+    'settings.json': scanSettingsJson,
+    'launch.json': scanLaunchJson,
+  };
 
-  for (const { path: fp, scanner } of vscodeFiles) {
-    if (!fileSet.has(fp)) continue;
+  // Include nested workspace folders in monorepos, not only root .vscode/.
+  for (const fp of allFiles.filter(f => /(^|\/)\.vscode\/(tasks|settings|launch)\.json$/i.test(f))) {
+    const scanner = vscodeScanners[path.basename(fp).toLowerCase()];
+    if (!scanner) continue;
     const content = readFileFromBranch(workspacePath, branch, fp);
     if (content === null) continue;
     scannedFiles.push(fp);
@@ -479,17 +659,36 @@ export function scanBranch(
     }
   }
 
+  // ── Incident-specific executable config files and propagation helpers ──────
+  const executableConfigName = /^(postcss|next|tailwind)\.config\.(?:js|mjs|cjs|ts)$/i;
+  for (const fp of allFiles) {
+    const baseName = path.basename(fp);
+    if (executableConfigName.test(baseName)) {
+      const content = readFileFromBranch(workspacePath, branch, fp);
+      if (content !== null) {
+        scannedFiles.push(fp);
+        threats.push(...scanInjectedConfig(content, fp));
+      }
+      continue;
+    }
+
+    if (baseName.toLowerCase() === 'config.bat') {
+      const content = readFileFromBranch(workspacePath, branch, fp);
+      if (content !== null) {
+        scannedFiles.push(fp);
+        threats.push(...scanPropagationScript(content, fp));
+      }
+    }
+  }
+
   // ── Font / binary files across all known font directories ─────────────────
   const fontExtensions = new Set(['.woff2', '.woff', '.ttf', '.otf']);
-  const fontDirs = projectType === 'flutter'
-    ? ['fonts/', 'assets/fonts/', 'assets/']
-    : ['public/fonts/', 'fonts/', 'assets/', 'static/fonts/'];
-
   for (const f of allFiles) {
     const ext = path.extname(f).toLowerCase();
     if (!fontExtensions.has(ext)) continue;
 
-    const inFontDir = fontDirs.some(d => f.startsWith(d));
+    const inFontDir = /(^|\/)(public\/fonts|static\/fonts|assets\/fonts|fonts)\//i.test(f) ||
+      (projectType === 'flutter' && /(^|\/)assets\//i.test(f));
     if (!inFontDir) continue;
 
     scannedFiles.push(f);

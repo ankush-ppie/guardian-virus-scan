@@ -187,6 +187,7 @@ function buildReportHtml(result) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
   <title>Guardian Scan Report</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -686,7 +687,7 @@ ${buildBranchOverview(result)}
 </div>
 
 <div class="footer">
-  <span class="footer-badge">Guardian v${result.version || '1.0.2'}</span>
+  <span class="footer-badge">Guardian v${result.version || '1.1.0'}</span>
   <span class="footer-dot">·</span>
   Scanned ${result.branches.length} branch${result.branches.length !== 1 ? 'es' : ''}
   <span class="footer-dot">·</span>

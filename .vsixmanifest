@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 	<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
 		<Metadata>
-			<Identity Language="en-US" Id="guardian-virus-scan" Version="1.0.0" Publisher="ankushlokhande" />
+			<Identity Language="en-US" Id="guardian-virus-scan" Version="1.1.0" Publisher="ankushlokhande" />
 			<DisplayName>Guardian Virus Scan</DisplayName>
-			<Description xml:space="preserve">Scans all local git branches for malicious .vscode configs, fake font files, and injected code before they execute.</Description>
+			<Description xml:space="preserve">Scans the working tree plus local and remote-tracking Git refs for malicious tasks, injected configs, fake fonts, and propagation scripts.</Description>
 			<Tags>git</Tags>
 			<Categories>Other</Categories>
 			<GalleryFlags>Public</GalleryFlags>
