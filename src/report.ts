@@ -260,10 +260,10 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
     }
     .header-main {
       display: flex; align-items: flex-start; justify-content: space-between;
-      gap: 16px; margin-bottom: 10px; flex-wrap: wrap;
+      gap: 16px; margin-bottom: 8px; flex-wrap: wrap;
     }
     .header-left {
-      display: flex; flex-direction: column; min-width: 0; flex: 1 1 280px;
+      display: flex; flex-direction: column; min-width: 0;
     }
     .header-title-row {
       display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -288,9 +288,13 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
       word-break: break-all;
       padding-left: 38px;
     }
-    .header-right {
-      display: flex; flex-direction: column; align-items: flex-end;
-      gap: 5px; flex-shrink: 0; margin-left: auto;
+    .header-actions {
+      margin-left: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      flex-shrink: 0;
     }
     .rescan-btn {
       display: flex; align-items: center; gap: 6px;
@@ -305,32 +309,24 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
       background: var(--vscode-button-secondaryHoverBackground, #45494a);
       border-color: var(--vscode-focusBorder);
     }
-    .header-reload-hint {
-      font-size: 10px; color: var(--text3);
-      display: flex; align-items: center; gap: 4px;
-      white-space: nowrap; user-select: none;
-      cursor: pointer; padding: 2px 4px; border-radius: 4px;
-      transition: opacity 0.12s;
+    .reload-link-btn {
+      background: none;
+      border: none;
+      color: var(--vscode-textLink-foreground, var(--blue));
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 1px 2px;
+      border-radius: 3px;
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: all 0.12s ease;
     }
-    .header-reload-hint:hover { opacity: 0.8; }
-    .hint-label { color: var(--text3); font-size: 10px; }
-    .kbd {
-      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-      font-size: 9px; font-weight: 600;
-      padding: 1px 5px; border-radius: 4px;
-      background: var(--bg3); color: var(--text2);
-      border: 1px solid var(--border2);
-      line-height: 1.3; display: inline-block;
-    }
-    .kbd-join { color: var(--text3); font-size: 9px; margin: 0 -1px; }
-    .hint-arrow { color: var(--text3); font-size: 10px; }
-    .hint-cmd { color: var(--vscode-textLink-foreground, var(--blue)); font-weight: 600; }
-
-    @media (max-width: 680px) {
-      .header-main { flex-direction: column; align-items: stretch; gap: 10px; }
-      .header-right { align-items: flex-start; margin-left: 0; }
-      .workspace-path { padding-left: 0; }
-      .header-reload-hint { flex-wrap: wrap; }
+    .reload-link-btn:hover {
+      text-decoration: underline;
+      color: var(--vscode-textLink-activeForeground, #70b0ff);
     }
 
     /* ─────────────────────────────────────────────
@@ -742,14 +738,9 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
       </div>
       <div class="workspace-path">${escHtml(result.workspacePath)}</div>
     </div>
-    <div class="header-right">
+    <div class="header-actions">
       <button class="rescan-btn" onclick="rescan()">↺ Rescan</button>
-      <div class="header-reload-hint" onclick="reloadWindow()" title="Click to reload window or press Cmd+Shift+P and run Reload Window">
-        <span class="hint-label">Reload:</span>
-        <kbd class="kbd">Cmd</kbd><span class="kbd-join">+</span><kbd class="kbd">Shift</kbd><span class="kbd-join">+</span><kbd class="kbd">P</kbd>
-        <span class="hint-arrow">→</span>
-        <span class="hint-cmd">Reload Window</span>
-      </div>
+      <button class="reload-link-btn" onclick="reloadWindow()" title="Cmd+Shift+P → Developer: Reload Window">Reload Window</button>
     </div>
   </div>
   <div class="stat-tabs">
