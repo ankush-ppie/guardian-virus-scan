@@ -248,9 +248,15 @@ function buildReportHtml(result) {
       padding: 16px 28px 0;
       position: sticky; top: 0; z-index: 20;
     }
-    .header-top {
-      display: flex; align-items: center; gap: 10px;
-      margin-bottom: 4px; flex-wrap: wrap;
+    .header-main {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 16px; margin-bottom: 10px; flex-wrap: wrap;
+    }
+    .header-left {
+      display: flex; flex-direction: column; min-width: 0; flex: 1 1 280px;
+    }
+    .header-title-row {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     }
     .header-logo {
       width: 28px; height: 28px;
@@ -260,17 +266,61 @@ function buildReportHtml(result) {
       display: flex; align-items: center; justify-content: center;
       font-size: 15px; flex-shrink: 0;
     }
-    .header-top h1 {
+    .header-title-row h1 {
       font-size: 14px; font-weight: 600; color: var(--text);
       letter-spacing: -0.01em;
     }
-    .header-top h1 span { color: var(--text2); font-weight: 400; }
+    .header-title-row h1 span { color: var(--text2); font-weight: 400; }
     .workspace-path {
       font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
       font-size: 10px; color: var(--text3);
-      margin-bottom: 14px; margin-top: 2px;
+      margin-top: 3px;
       word-break: break-all;
       padding-left: 38px;
+    }
+    .header-right {
+      display: flex; flex-direction: column; align-items: flex-end;
+      gap: 5px; flex-shrink: 0; margin-left: auto;
+    }
+    .rescan-btn {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--vscode-button-secondaryBackground, #3a3d3e);
+      color: var(--vscode-button-secondaryForeground, #ffffff);
+      border: 1px solid var(--border);
+      padding: 5px 13px; border-radius: 7px; cursor: pointer;
+      font-size: 12px; font-weight: 600; white-space: nowrap;
+      transition: all 0.12s;
+    }
+    .rescan-btn:hover {
+      background: var(--vscode-button-secondaryHoverBackground, #45494a);
+      border-color: var(--vscode-focusBorder);
+    }
+    .header-reload-hint {
+      font-size: 10px; color: var(--text3);
+      display: flex; align-items: center; gap: 4px;
+      white-space: nowrap; user-select: none;
+      cursor: pointer; padding: 2px 4px; border-radius: 4px;
+      transition: opacity 0.12s;
+    }
+    .header-reload-hint:hover { opacity: 0.8; }
+    .hint-label { color: var(--text3); font-size: 10px; }
+    .kbd {
+      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 9px; font-weight: 600;
+      padding: 1px 5px; border-radius: 4px;
+      background: var(--bg3); color: var(--text2);
+      border: 1px solid var(--border2);
+      line-height: 1.3; display: inline-block;
+    }
+    .kbd-join { color: var(--text3); font-size: 9px; margin: 0 -1px; }
+    .hint-arrow { color: var(--text3); font-size: 10px; }
+    .hint-cmd { color: var(--vscode-textLink-foreground, var(--blue)); font-weight: 600; }
+
+    @media (max-width: 680px) {
+      .header-main { flex-direction: column; align-items: stretch; gap: 10px; }
+      .header-right { align-items: flex-start; margin-left: 0; }
+      .workspace-path { padding-left: 0; }
+      .header-reload-hint { flex-wrap: wrap; }
     }
 
     /* ─────────────────────────────────────────────
@@ -649,20 +699,6 @@ function buildReportHtml(result) {
     .proj-generic { background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
 
     /* ─────────────────────────────────────────────
-       RESCAN BUTTON
-    ───────────────────────────────────────────── */
-    .rescan-btn {
-      display: flex; align-items: center; gap: 6px;
-      background: var(--vscode-button-secondaryBackground, #3a3d3e); color: var(--vscode-button-secondaryForeground, #ffffff);
-      border: 1px solid var(--border);
-      padding: 6px 14px; border-radius: 7px; cursor: pointer;
-      font-size: 12px; font-weight: 600; white-space: nowrap;
-      margin-left: auto;
-      transition: all 0.12s;
-    }
-    .rescan-btn:hover { background: var(--vscode-button-secondaryHoverBackground, #45494a); border-color: var(--vscode-focusBorder); }
-
-    /* ─────────────────────────────────────────────
        FOOTER
     ───────────────────────────────────────────── */
     .footer {
@@ -687,13 +723,25 @@ function buildReportHtml(result) {
 <body>
 
 <div class="header">
-  <div class="header-top">
-    <div class="header-logo">🛡️</div>
-    <h1>Guardian <span>— Branch Scan Report</span></h1>
-    ${projectBadge}
-    <button class="rescan-btn" onclick="rescan()">↺ Rescan</button>
+  <div class="header-main">
+    <div class="header-left">
+      <div class="header-title-row">
+        <div class="header-logo">🛡️</div>
+        <h1>Guardian <span>— Branch Scan Report</span></h1>
+        ${projectBadge}
+      </div>
+      <div class="workspace-path">${escHtml(result.workspacePath)}</div>
+    </div>
+    <div class="header-right">
+      <button class="rescan-btn" onclick="rescan()">↺ Rescan</button>
+      <div class="header-reload-hint" onclick="reloadWindow()" title="Click to reload window or press Cmd+Shift+P and run Reload Window">
+        <span class="hint-label">Reload:</span>
+        <kbd class="kbd">Cmd</kbd><span class="kbd-join">+</span><kbd class="kbd">Shift</kbd><span class="kbd-join">+</span><kbd class="kbd">P</kbd>
+        <span class="hint-arrow">→</span>
+        <span class="hint-cmd">Reload Window</span>
+      </div>
+    </div>
   </div>
-  <div class="workspace-path">${escHtml(result.workspacePath)}</div>
   <div class="stat-tabs">
     <div class="stat-tab">
       <div class="stat-tab-val ${totalThreats > 0 ? 'c-red' : 'c-green'}">${totalThreats}</div>
@@ -883,6 +931,10 @@ ${buildBranchOverview(result)}
 
   function rescan() {
     vscode.postMessage({ action: 'rescan' });
+  }
+
+  function reloadWindow() {
+    vscode.postMessage({ action: 'reloadWindow' });
   }
 
   function openFile(e, btn) {

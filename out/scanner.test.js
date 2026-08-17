@@ -167,6 +167,10 @@ function testBranchOverviewReport() {
     assert.ok(html.includes('branch-scope-tag tag-local'), 'Local branch must have Local scope tag');
     assert.ok(html.includes('branch-scope-tag tag-remote'), 'Remote branch must have Remote scope tag');
     assert.ok(html.includes('main (working tree)'), 'Current branch should be represented as main (working tree)');
+    // 6: Header reload hint below rescan button
+    assert.ok(html.includes('header-reload-hint'), 'Header should contain reload hint container');
+    assert.ok(html.includes('Reload Window'), 'Header reload hint should mention Reload Window command');
+    assert.ok(html.includes('Cmd'), 'Header reload hint should mention Cmd shortcut');
 }
 testInjectedConfigFamilies();
 testPropagationScript();

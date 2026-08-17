@@ -191,6 +191,11 @@ function showReport(
         return;
       }
 
+      if (msg.action === 'reloadWindow') {
+        vscode.commands.executeCommand('workbench.action.reloadWindow');
+        return;
+      }
+
       if (msg.action === 'openFile') {
         if (latestResult) {
           await openThreatFile(

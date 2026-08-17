@@ -168,6 +168,10 @@ function showReport(result, context) {
             vscode.commands.executeCommand('guardian.scanAllBranches');
             return;
         }
+        if (msg.action === 'reloadWindow') {
+            vscode.commands.executeCommand('workbench.action.reloadWindow');
+            return;
+        }
         if (msg.action === 'openFile') {
             if (latestResult) {
                 await openThreatFile(context, latestResult.workspacePath, msg.file, msg.line, msg.branch);
