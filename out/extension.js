@@ -186,13 +186,50 @@ function showReport(result, context) {
         }
     }, undefined, context.subscriptions);
 }
+let statusBarItem;
+function updateStatusBar(result, isScanning = false) {
+    if (!statusBarItem)
+        return;
+    if (isScanning) {
+        statusBarItem.text = '$(sync~spin) Guardian: Scanning...';
+        statusBarItem.tooltip = 'Guardian is scanning workspace and branch refs...';
+        statusBarItem.backgroundColor = undefined;
+        statusBarItem.show();
+        return;
+    }
+    if (!result) {
+        statusBarItem.text = '$(shield) Guardian';
+        statusBarItem.tooltip = 'Guardian: Click to scan workspace and open report';
+        statusBarItem.backgroundColor = undefined;
+        statusBarItem.show();
+        return;
+    }
+    const infectedBranches = result.branches.filter(b => b.threats.length > 0);
+    const totalThreats = result.branches.reduce((acc, b) => acc + b.threats.length, 0);
+    if (totalThreats > 0) {
+        statusBarItem.text = `$(shield) Guardian: ${totalThreats} threat${totalThreats !== 1 ? 's' : ''}`;
+        statusBarItem.tooltip = `Guardian: ${infectedBranches.length} infected branch(es), ${totalThreats} threat(s) detected. Click to open report.`;
+        statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+    }
+    else {
+        statusBarItem.text = '$(shield) Guardian: Clean';
+        statusBarItem.tooltip = `Guardian: All ${result.branches.length} branch refs clean. Click to open report.`;
+        statusBarItem.backgroundColor = undefined;
+    }
+    statusBarItem.show();
+}
 // ─── Activate ─────────────────────────────────────────────────────────────────
 function activate(context) {
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10);
+    statusBarItem.command = 'guardian.openReport';
+    updateStatusBar();
+    context.subscriptions.push(statusBarItem);
     context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('guardian-branch', {
         provideTextDocumentContent: uri => virtualDocuments.get(uri.toString()) ?? '',
     }));
     // Helper: run scan with progress UI
     async function triggerScan(workspacePath) {
+        updateStatusBar(undefined, true);
         await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: '🛡️ Guardian: Scanning branches...',
@@ -201,12 +238,14 @@ function activate(context) {
             try {
                 const result = await runFullScan(workspacePath, progress, token);
                 if (token.isCancellationRequested) {
+                    updateStatusBar(latestResult, false);
                     vscode.window.showInformationMessage('Guardian: Scan cancelled.');
                     return;
                 }
                 latestResult = result;
+                updateStatusBar(result, false);
                 showReport(result, context);
-                // Status bar summary
+                // Status bar notification if infected
                 const infectedBranches = result.branches.filter(b => b.threats.length > 0);
                 if (infectedBranches.length > 0) {
                     const names = infectedBranches.map(b => b.branch).join(', ');
@@ -217,6 +256,7 @@ function activate(context) {
                 }
             }
             catch (e) {
+                updateStatusBar(latestResult, false);
                 // Not a git repo — scan silently skipped (no error popup)
                 if (e.message?.includes('Not a git repository'))
                     return;
@@ -240,7 +280,15 @@ function activate(context) {
             triggerScan(folder.uri.fsPath);
         }
     }));
-    // ── Manual scan command ───────────────────────────────────────────────────
+    // ── Commands ─────────────────────────────────────────────────────────────
+    context.subscriptions.push(vscode.commands.registerCommand('guardian.openReport', async () => {
+        if (latestResult) {
+            showReport(latestResult, context);
+        }
+        else {
+            vscode.commands.executeCommand('guardian.scanAllBranches');
+        }
+    }));
     context.subscriptions.push(vscode.commands.registerCommand('guardian.scanAllBranches', async () => {
         const folders = vscode.workspace.workspaceFolders;
         if (!folders?.length) {
@@ -254,4 +302,5 @@ function activate(context) {
 }
 function deactivate() {
     reportPanel?.dispose();
+    statusBarItem?.dispose();
 }

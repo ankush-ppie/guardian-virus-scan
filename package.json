@@ -43,6 +43,10 @@
 			{
 				"command": "guardian.scanAllBranches",
 				"title": "Guardian: Scan Working Tree and All Branch Refs"
+			},
+			{
+				"command": "guardian.openReport",
+				"title": "Guardian: Open Scan Report"
 			}
 		]
 	},
