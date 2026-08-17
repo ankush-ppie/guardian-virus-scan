@@ -11,8 +11,11 @@ import {
   scanBranch,
   scanWorkingTree,
   WorkspaceScanResult,
+  applySafePreferences,
+  getActiveThreats,
 } from './scanner';
 import { buildReportHtml } from './report';
+import { getAllSafeRules, addSafeRule, removeSafeRule } from './preferences';
 
 let reportPanel: vscode.WebviewPanel | undefined;
 let latestResult: WorkspaceScanResult | undefined;
@@ -160,9 +163,9 @@ function showReport(
   result: WorkspaceScanResult,
   context: vscode.ExtensionContext
 ) {
-  const infectedCount = result.branches.filter(b => b.threats.length > 0).length;
-  const title = infectedCount > 0
-    ? `🛡️ Guardian — ${infectedCount} branch${infectedCount !== 1 ? 'es' : ''} infected`
+  const activeInfectedCount = result.branches.filter(b => getActiveThreats(b.threats).length > 0).length;
+  const title = activeInfectedCount > 0
+    ? `🛡️ Guardian — ${activeInfectedCount} branch${activeInfectedCount !== 1 ? 'es' : ''} infected`
     : '🛡️ Guardian — All branches clean';
 
   if (reportPanel) {
@@ -204,6 +207,33 @@ function showReport(
         return;
       }
 
+      if (msg.action === 'markSafe') {
+        const { rule, file, scope } = msg;
+        await addSafeRule(rule, file, scope, context.workspaceState, context.globalState);
+        const safeRules = getAllSafeRules(context.workspaceState, context.globalState);
+        if (latestResult) {
+          latestResult = applySafePreferences(latestResult, safeRules);
+          showReport(latestResult, context);
+          updateStatusBar(latestResult, false);
+        }
+        const scopeDesc = scope === 'global' ? 'all projects' : 'this project';
+        vscode.window.showInformationMessage(`🛡️ Guardian: "${rule}" marked as safe for ${scopeDesc}.`);
+        return;
+      }
+
+      if (msg.action === 'markUnsafe') {
+        const { rule, file } = msg;
+        await removeSafeRule(rule, file, context.workspaceState, context.globalState);
+        const safeRules = getAllSafeRules(context.workspaceState, context.globalState);
+        if (latestResult) {
+          latestResult = applySafePreferences(latestResult, safeRules);
+          showReport(latestResult, context);
+          updateStatusBar(latestResult, false);
+        }
+        vscode.window.showInformationMessage(`🛡️ Guardian: "${rule}" marked as active/unsafe.`);
+        return;
+      }
+
       if (msg.action === 'openFile') {
         if (latestResult) {
           await openThreatFile(
@@ -242,12 +272,12 @@ function updateStatusBar(result?: WorkspaceScanResult, isScanning: boolean = fal
     return;
   }
 
-  const infectedBranches = result.branches.filter(b => b.threats.length > 0);
-  const totalThreats = result.branches.reduce((acc, b) => acc + b.threats.length, 0);
+  const activeInfectedBranches = result.branches.filter(b => getActiveThreats(b.threats).length > 0);
+  const totalActiveThreats = result.branches.reduce((acc, b) => acc + getActiveThreats(b.threats).length, 0);
 
-  if (totalThreats > 0) {
-    statusBarItem.text = `$(shield) Guardian: ${totalThreats} threat${totalThreats !== 1 ? 's' : ''}`;
-    statusBarItem.tooltip = `Guardian: ${infectedBranches.length} infected branch(es), ${totalThreats} threat(s) detected. Click to open report.`;
+  if (totalActiveThreats > 0) {
+    statusBarItem.text = `$(shield) Guardian: ${totalActiveThreats} threat${totalActiveThreats !== 1 ? 's' : ''}`;
+    statusBarItem.tooltip = `Guardian: ${activeInfectedBranches.length} infected branch(es), ${totalActiveThreats} threat(s) detected. Click to open report.`;
     statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
   } else {
     statusBarItem.text = '$(shield) Guardian: Clean';
@@ -283,7 +313,7 @@ export function activate(context: vscode.ExtensionContext) {
       },
       async (progress, token) => {
         try {
-          const result = await runFullScan(workspacePath, progress, token);
+          const rawResult = await runFullScan(workspacePath, progress, token);
 
           if (token.isCancellationRequested) {
             updateStatusBar(latestResult, false);
@@ -291,16 +321,19 @@ export function activate(context: vscode.ExtensionContext) {
             return;
           }
 
+          const safeRules = getAllSafeRules(context.workspaceState, context.globalState);
+          const result = applySafePreferences(rawResult, safeRules);
+
           latestResult = result;
           updateStatusBar(result, false);
           showReport(result, context);
 
           // Status bar notification if infected
-          const infectedBranches = result.branches.filter(b => b.threats.length > 0);
-          if (infectedBranches.length > 0) {
-            const names = infectedBranches.map(b => b.branch).join(', ');
+          const activeInfectedBranches = result.branches.filter(b => getActiveThreats(b.threats).length > 0);
+          if (activeInfectedBranches.length > 0) {
+            const names = activeInfectedBranches.map(b => b.branch).join(', ');
             vscode.window.showWarningMessage(
-              `🛡️ Guardian: ${infectedBranches.length} infected branch${infectedBranches.length !== 1 ? 'es' : ''} found: ${names}`,
+              `🛡️ Guardian: ${activeInfectedBranches.length} infected branch${activeInfectedBranches.length !== 1 ? 'es' : ''} found: ${names}`,
               'View Report'
             ).then(choice => {
               if (choice === 'View Report') showReport(result, context);

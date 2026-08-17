@@ -175,9 +175,106 @@ function testBranchOverviewReport() {
     assert.ok(html.includes('bo-copy-btn'), 'Branch overview items should have copy buttons');
     assert.ok(html.includes('copyBranch(event,'), 'Copy buttons should invoke copyBranch helper');
 }
-testInjectedConfigFamilies();
-testPropagationScript();
-testWorkingTreeCoverage();
-testRemoteTrackingRefCoverage();
-testBranchOverviewReport();
-console.log('Guardian scanner regression tests passed.');
+async function testSafeRulesPreferences() {
+    const { addSafeRule, removeSafeRule, matchSafeRule, getAllSafeRules } = require('./preferences');
+    const { applySafePreferences, getActiveThreats, getSafeThreats } = require('./scanner');
+    // Mock StateStorage
+    class MockState {
+        constructor() {
+            this.data = new Map();
+        }
+        get(key, defaultValue) {
+            return (this.data.has(key) ? this.data.get(key) : defaultValue);
+        }
+        async update(key, value) {
+            this.data.set(key, value);
+        }
+    }
+    const workspaceState = new MockState();
+    const globalState = new MockState();
+    // Add project-level rule
+    await addSafeRule('BUILD_YAML_CUSTOM_BUILDER', 'build.yaml', 'project', workspaceState, globalState);
+    // Add global-level rule
+    await addSafeRule('VSCODE_TASK_AUTORUN', undefined, 'global', workspaceState, globalState);
+    const rules = getAllSafeRules(workspaceState, globalState);
+    assert.strictEqual(rules.length, 2, 'Should retrieve 2 safe rules');
+    // Match checks
+    const match1 = matchSafeRule('BUILD_YAML_CUSTOM_BUILDER', 'build.yaml', rules);
+    assert.ok(match1, 'Should match exact file and rule');
+    assert.strictEqual(match1?.scope, 'project');
+    const match2 = matchSafeRule('VSCODE_TASK_AUTORUN', '.vscode/tasks.json', rules);
+    assert.ok(match2, 'Should match global rule across any file');
+    assert.strictEqual(match2?.scope, 'global');
+    const matchMismatch = matchSafeRule('BUILD_YAML_CUSTOM_BUILDER', 'other/file.dart', rules);
+    assert.strictEqual(matchMismatch, undefined, 'Should not match different file for file-specific rule');
+    // Test applySafePreferences on scan result
+    const rawResult = {
+        workspacePath: '/mock/repo',
+        projectType: 'flutter',
+        currentBranch: 'main',
+        localBranches: ['main'],
+        remoteBranches: [],
+        branches: [
+            {
+                branch: 'main (working tree)',
+                isCurrentBranch: true,
+                threats: [
+                    {
+                        severity: 'medium',
+                        file: 'build.yaml',
+                        rule: 'BUILD_YAML_CUSTOM_BUILDER',
+                        detail: 'build.yaml custom builder',
+                    },
+                    {
+                        severity: 'high',
+                        file: '.vscode/tasks.json',
+                        rule: 'VSCODE_TASK_AUTORUN',
+                        detail: 'auto run task',
+                    },
+                    {
+                        severity: 'critical',
+                        file: 'setup.sh',
+                        rule: 'MALICIOUS_CURL_BASH',
+                        detail: 'curl pipe bash',
+                    },
+                ],
+                scannedFiles: ['build.yaml', '.vscode/tasks.json', 'setup.sh'],
+            },
+        ],
+        scanDurationMs: 10,
+        version: '1.1.0',
+    };
+    const processed = applySafePreferences(rawResult, rules);
+    const threats = processed.branches[0].threats;
+    assert.strictEqual(threats[0].isSafe, true, 'build.yaml threat should be marked safe');
+    assert.strictEqual(threats[0].safeScope, 'project');
+    assert.strictEqual(threats[1].isSafe, true, 'tasks.json threat should be marked safe');
+    assert.strictEqual(threats[1].safeScope, 'global');
+    assert.strictEqual(threats[2].isSafe, false, 'setup.sh threat should remain active');
+    assert.strictEqual(getActiveThreats(threats).length, 1, 'Only 1 active threat remains');
+    assert.strictEqual(getSafeThreats(threats).length, 2, '2 safe findings identified');
+    // Test Report HTML generation with safe findings
+    const html = (0, report_1.buildReportHtml)(processed);
+    assert.ok(html.includes('Marked Safe (Project)'), 'Report should render project safe badge');
+    assert.ok(html.includes('Marked Safe (Global)'), 'Report should render global safe badge');
+    assert.ok(html.includes('Mark as Unsafe'), 'Report should render Mark as Unsafe buttons');
+    assert.ok(html.includes('Whitelisted Rules (Marked as Safe)'), 'Report should display Whitelisted Rules panel');
+    assert.ok(html.includes('data-filter="safe"'), 'Report toolbar should include Safe filter tag');
+    assert.ok(html.includes('markSafe('), 'Report script should define markSafe');
+    assert.ok(html.includes('markUnsafe('), 'Report script should define markUnsafe');
+    // Remove rule check
+    await removeSafeRule('BUILD_YAML_CUSTOM_BUILDER', 'build.yaml', workspaceState, globalState);
+    const rulesAfterRemove = getAllSafeRules(workspaceState, globalState);
+    assert.strictEqual(rulesAfterRemove.length, 1, 'Should have 1 rule left after removal');
+    assert.strictEqual(rulesAfterRemove[0].rule, 'VSCODE_TASK_AUTORUN');
+}
+async function runAllTests() {
+    testInjectedConfigFamilies();
+    testPropagationScript();
+    testWorkingTreeCoverage();
+    testRemoteTrackingRefCoverage();
+    testBranchOverviewReport();
+    await testSafeRulesPreferences();
+    console.log('Guardian scanner regression tests passed.');
+}
+runAllTests();

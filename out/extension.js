@@ -41,6 +41,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const scanner_1 = require("./scanner");
 const report_1 = require("./report");
+const preferences_1 = require("./preferences");
 let reportPanel;
 let latestResult;
 const virtualDocuments = new Map();
@@ -147,9 +148,9 @@ async function openThreatFile(context, workspaceRoot, file, line, branch) {
 }
 // ─── Show / refresh the report panel ─────────────────────────────────────────
 function showReport(result, context) {
-    const infectedCount = result.branches.filter(b => b.threats.length > 0).length;
-    const title = infectedCount > 0
-        ? `🛡️ Guardian — ${infectedCount} branch${infectedCount !== 1 ? 'es' : ''} infected`
+    const activeInfectedCount = result.branches.filter(b => (0, scanner_1.getActiveThreats)(b.threats).length > 0).length;
+    const title = activeInfectedCount > 0
+        ? `🛡️ Guardian — ${activeInfectedCount} branch${activeInfectedCount !== 1 ? 'es' : ''} infected`
         : '🛡️ Guardian — All branches clean';
     if (reportPanel) {
         latestResult = result;
@@ -179,6 +180,31 @@ function showReport(result, context) {
             }
             return;
         }
+        if (msg.action === 'markSafe') {
+            const { rule, file, scope } = msg;
+            await (0, preferences_1.addSafeRule)(rule, file, scope, context.workspaceState, context.globalState);
+            const safeRules = (0, preferences_1.getAllSafeRules)(context.workspaceState, context.globalState);
+            if (latestResult) {
+                latestResult = (0, scanner_1.applySafePreferences)(latestResult, safeRules);
+                showReport(latestResult, context);
+                updateStatusBar(latestResult, false);
+            }
+            const scopeDesc = scope === 'global' ? 'all projects' : 'this project';
+            vscode.window.showInformationMessage(`🛡️ Guardian: "${rule}" marked as safe for ${scopeDesc}.`);
+            return;
+        }
+        if (msg.action === 'markUnsafe') {
+            const { rule, file } = msg;
+            await (0, preferences_1.removeSafeRule)(rule, file, context.workspaceState, context.globalState);
+            const safeRules = (0, preferences_1.getAllSafeRules)(context.workspaceState, context.globalState);
+            if (latestResult) {
+                latestResult = (0, scanner_1.applySafePreferences)(latestResult, safeRules);
+                showReport(latestResult, context);
+                updateStatusBar(latestResult, false);
+            }
+            vscode.window.showInformationMessage(`🛡️ Guardian: "${rule}" marked as active/unsafe.`);
+            return;
+        }
         if (msg.action === 'openFile') {
             if (latestResult) {
                 await openThreatFile(context, latestResult.workspacePath, msg.file, msg.line, msg.branch);
@@ -204,11 +230,11 @@ function updateStatusBar(result, isScanning = false) {
         statusBarItem.show();
         return;
     }
-    const infectedBranches = result.branches.filter(b => b.threats.length > 0);
-    const totalThreats = result.branches.reduce((acc, b) => acc + b.threats.length, 0);
-    if (totalThreats > 0) {
-        statusBarItem.text = `$(shield) Guardian: ${totalThreats} threat${totalThreats !== 1 ? 's' : ''}`;
-        statusBarItem.tooltip = `Guardian: ${infectedBranches.length} infected branch(es), ${totalThreats} threat(s) detected. Click to open report.`;
+    const activeInfectedBranches = result.branches.filter(b => (0, scanner_1.getActiveThreats)(b.threats).length > 0);
+    const totalActiveThreats = result.branches.reduce((acc, b) => acc + (0, scanner_1.getActiveThreats)(b.threats).length, 0);
+    if (totalActiveThreats > 0) {
+        statusBarItem.text = `$(shield) Guardian: ${totalActiveThreats} threat${totalActiveThreats !== 1 ? 's' : ''}`;
+        statusBarItem.tooltip = `Guardian: ${activeInfectedBranches.length} infected branch(es), ${totalActiveThreats} threat(s) detected. Click to open report.`;
         statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
     }
     else {
@@ -236,20 +262,22 @@ function activate(context) {
             cancellable: true,
         }, async (progress, token) => {
             try {
-                const result = await runFullScan(workspacePath, progress, token);
+                const rawResult = await runFullScan(workspacePath, progress, token);
                 if (token.isCancellationRequested) {
                     updateStatusBar(latestResult, false);
                     vscode.window.showInformationMessage('Guardian: Scan cancelled.');
                     return;
                 }
+                const safeRules = (0, preferences_1.getAllSafeRules)(context.workspaceState, context.globalState);
+                const result = (0, scanner_1.applySafePreferences)(rawResult, safeRules);
                 latestResult = result;
                 updateStatusBar(result, false);
                 showReport(result, context);
                 // Status bar notification if infected
-                const infectedBranches = result.branches.filter(b => b.threats.length > 0);
-                if (infectedBranches.length > 0) {
-                    const names = infectedBranches.map(b => b.branch).join(', ');
-                    vscode.window.showWarningMessage(`🛡️ Guardian: ${infectedBranches.length} infected branch${infectedBranches.length !== 1 ? 'es' : ''} found: ${names}`, 'View Report').then(choice => {
+                const activeInfectedBranches = result.branches.filter(b => (0, scanner_1.getActiveThreats)(b.threats).length > 0);
+                if (activeInfectedBranches.length > 0) {
+                    const names = activeInfectedBranches.map(b => b.branch).join(', ');
+                    vscode.window.showWarningMessage(`🛡️ Guardian: ${activeInfectedBranches.length} infected branch${activeInfectedBranches.length !== 1 ? 'es' : ''} found: ${names}`, 'View Report').then(choice => {
                         if (choice === 'View Report')
                             showReport(result, context);
                     });

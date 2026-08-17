@@ -1,4 +1,5 @@
-import { WorkspaceScanResult, BranchScanResult, Threat } from './scanner';
+import { WorkspaceScanResult, BranchScanResult, Threat, getActiveThreats, getSafeThreats } from './scanner';
+import { SafeRuleEntry } from './preferences';
 
 function severityColor(s: string): string {
   return s === 'critical' ? 'var(--red)' : s === 'high' ? 'var(--orange)' : 'var(--yellow)';
@@ -18,19 +19,23 @@ function escHtml(s: any): string {
 }
 
 function branchStatusBadge(result: BranchScanResult): string {
-  const critical = result.threats.filter(t => t.severity === 'critical').length;
-  const high = result.threats.filter(t => t.severity === 'high').length;
-  const medium = result.threats.filter(t => t.severity === 'medium').length;
+  const active = getActiveThreats(result.threats);
+  const safe = getSafeThreats(result.threats);
+  const critical = active.filter(t => t.severity === 'critical').length;
+  const high = active.filter(t => t.severity === 'high').length;
+  const medium = active.filter(t => t.severity === 'medium').length;
   if (result.error) return `<span class="badge badge-gray">⚠ Error</span>`;
   if (critical > 0) return `<span class="badge badge-red">🔴 ${critical} critical${high ? ` · ${high} high` : ''}</span>`;
   if (high > 0) return `<span class="badge badge-orange">🟠 ${high} high${medium ? ` · ${medium} medium` : ''}</span>`;
   if (medium > 0) return `<span class="badge badge-yellow">🟡 ${medium} medium</span>`;
+  if (safe.length > 0) return `<span class="badge badge-green">✓ Clean · ${safe.length} Safe</span>`;
   return `<span class="badge badge-green">✓ Clean</span>`;
 }
 
 function threatCard(t: Threat, branch: string, uid: string): string {
   const snippetId = `snip-${uid}`;
   const btnId = `btn-${uid}`;
+  const menuId = `menu-${uid}`;
 
   const snippetBlock = t.snippet ? `
         <div class="snippet-wrap" id="${snippetId}">
@@ -44,17 +49,49 @@ function threatCard(t: Threat, branch: string, uid: string): string {
     ? `<script type="text/plain" id="data-${uid}">${escHtml(t.snippet)}<\/script>`
     : '';
 
+  const safeAction = t.isSafe
+    ? `
+      <span class="safe-badge-pill">🛡️ Marked Safe (${t.safeScope === 'global' ? 'Global' : 'Project'})</span>
+      <button class="unsafe-btn" onclick="markUnsafe(event, '${escHtml(t.rule)}', '${escHtml(t.file)}')">
+        <span class="btn-icon">⚠️</span> Mark as Unsafe
+      </button>`
+    : `
+      <div class="safe-dropdown" id="dropdown-${uid}">
+        <button class="safe-btn" id="btn-safe-${uid}" onclick="toggleSafeDropdown(event, '${uid}')">
+          <span class="btn-icon">🛡️</span> Mark as Safe <span class="caret-icon">▾</span>
+        </button>
+        <div class="safe-dropdown-menu" id="safe-menu-${uid}">
+          <div class="safe-menu-header">Whitelisting Options</div>
+          <button class="safe-menu-item" onclick="markSafe(event, '${escHtml(t.rule)}', '${escHtml(t.file)}', 'project')">
+            <div class="smi-icon smi-project">📁</div>
+            <div class="smi-content">
+              <div class="smi-title">For This Project</div>
+              <div class="smi-desc">Ignore in this repository only</div>
+            </div>
+          </button>
+          <div class="safe-menu-divider"></div>
+          <button class="safe-menu-item" onclick="markSafe(event, '${escHtml(t.rule)}', '${escHtml(t.file)}', 'global')">
+            <div class="smi-icon smi-global">🌐</div>
+            <div class="smi-content">
+              <div class="smi-title">For All Projects</div>
+              <div class="smi-desc">Ignore globally across all repos</div>
+            </div>
+          </button>
+        </div>
+      </div>`;
+
   return `
-    <div class="threat-card" data-sev="${t.severity}">
-      <div class="threat-left-bar" style="background:${severityColor(t.severity)}"></div>
+    <div class="threat-card ${t.isSafe ? 'is-safe' : ''}" data-sev="${t.severity}">
+      <div class="threat-left-bar" style="background:${t.isSafe ? 'var(--green)' : severityColor(t.severity)}"></div>
       <div class="threat-body">
         <div class="threat-header">
-          <span class="sev-pill" style="background:${severityBg(t.severity)};color:${severityColor(t.severity)};border:1px solid ${severityBorder(t.severity)}">${t.severity.toUpperCase()}</span>
+          <span class="sev-pill" style="background:${t.isSafe ? 'var(--bg-green-soft)' : severityBg(t.severity)};color:${t.isSafe ? 'var(--green)' : severityColor(t.severity)};border:1px solid ${t.isSafe ? 'rgba(74, 222, 128, 0.3)' : severityBorder(t.severity)}">${t.isSafe ? 'SAFE' : t.severity.toUpperCase()}</span>
           <code class="rule-code">${escHtml(t.rule)}</code>
           <span class="file-ref">
             <span class="file-ref-icon">📁</span>${escHtml(t.file)}${t.line ? `<span class="file-ref-line">:${t.line}</span>` : ''}
           </span>
           <div class="threat-actions">
+            ${safeAction}
             ${t.snippet
       ? `<button id="${btnId}" class="code-btn" onclick="toggleSnippet(event,'${snippetId}','${btnId}','pre-${uid}','data-${uid}')"><span class="btn-icon">⟨/⟩</span> View Code</button>`
       : ''}
@@ -80,17 +117,32 @@ function isRemoteBranch(branchName: string, localBranches: string[], remoteBranc
 }
 
 function branchSection(r: BranchScanResult, isRemote: boolean = false): string {
-  const isClean = r.threats.length === 0 && !r.error;
-  const isInfected = r.threats.length > 0;
+  const activeThreats = getActiveThreats(r.threats);
+  const safeThreats = getSafeThreats(r.threats);
+  const isClean = activeThreats.length === 0 && !r.error;
+  const isInfected = activeThreats.length > 0;
   const status = isInfected ? 'infected' : isClean ? 'clean' : 'error';
   const type = isRemote ? 'remote' : 'local';
 
-  const cards = r.threats
-    .map((t, i) => threatCard(t, r.branch, `${r.branch.replace(/[^a-zA-Z0-9]/g, '_')}_${i}`))
+  // Only active threats are rendered directly as threat cards in the branch
+  const activeCards = activeThreats
+    .map((t, i) => threatCard(t, r.branch, `${r.branch.replace(/[^a-zA-Z0-9]/g, '_')}_act_${i}`))
     .join('');
 
+  // Safe threats are tucked under a collapsible sub-panel so they don't clutter the active infected list
+  const safeCardsBlock = safeThreats.length > 0 ? `
+    <details class="safe-threats-details">
+      <summary class="safe-threats-summary">
+        <span class="bo-chevron">▶</span>
+        <span class="safe-threats-title">🛡️ ${safeThreats.length} Whitelisted / Safe Finding${safeThreats.length !== 1 ? 's' : ''}</span>
+      </summary>
+      <div class="safe-threats-body">
+        ${safeThreats.map((t, i) => threatCard(t, r.branch, `${r.branch.replace(/[^a-zA-Z0-9]/g, '_')}_safe_${i}`)).join('')}
+      </div>
+    </details>` : '';
+
   return `
-  <details class="branch-block ${status}" data-type="${type}" data-status="${status}" ${isInfected ? 'open' : ''}>
+  <details class="branch-block ${status} ${safeThreats.length > 0 ? 'has-safe' : ''}" data-type="${type}" data-status="${status}" data-safe="${safeThreats.length > 0 ? 'true' : 'false'}" ${isInfected ? 'open' : ''}>
     <summary class="branch-summary">
       <span class="branch-chevron">▶</span>
       <span class="branch-icon">⎇</span>
@@ -101,10 +153,42 @@ function branchSection(r: BranchScanResult, isRemote: boolean = false): string {
         <span class="branch-meta">${r.scannedFiles.length} file${r.scannedFiles.length !== 1 ? 's' : ''} scanned</span>
       </div>
     </summary>
-    ${isClean ? '<div class="clean-msg"><span class="clean-icon">✓</span> No threats found in this branch.</div>' : ''}
+    ${isClean && safeThreats.length === 0 ? '<div class="clean-msg"><span class="clean-icon">✓</span> No threats found in this branch.</div>' : ''}
+    ${isClean && safeThreats.length > 0 ? `<div class="clean-msg"><span class="clean-icon">✓</span> All ${safeThreats.length} finding${safeThreats.length !== 1 ? 's' : ''} in this branch marked as safe by user.</div>` : ''}
     ${r.error ? `<div class="error-msg">⚠ Could not read branch: ${escHtml(r.error)}</div>` : ''}
-    ${cards}
+    ${activeCards}
+    ${safeCardsBlock}
   </details>`;
+}
+
+function buildSafeRulesPanel(safeRules?: SafeRuleEntry[]): string {
+  if (!safeRules || safeRules.length === 0) return '';
+
+  return `
+<details class="safe-rules-panel">
+  <summary class="safe-rules-header">
+    <span class="bo-chevron">▶</span>
+    <span class="bo-title-icon">🛡️</span>
+    <span class="bo-title">Whitelisted Rules (Marked as Safe)</span>
+    <span class="safe-rules-count">${safeRules.length}</span>
+  </summary>
+  <div class="safe-rules-body">
+    <div class="safe-rules-list">
+      ${safeRules.map(sr => `
+        <div class="safe-rule-row">
+          <div class="safe-rule-info">
+            <code class="rule-code">${escHtml(sr.rule)}</code>
+            ${sr.file ? `<span class="safe-rule-file">📄 ${escHtml(sr.file)}</span>` : ''}
+            <span class="safe-rule-scope-badge ${sr.scope === 'global' ? 'scope-global' : 'scope-project'}">${sr.scope === 'global' ? '🌐 All Projects' : '📁 This Project'}</span>
+          </div>
+          <button class="unsafe-btn" onclick="markUnsafe(event, '${escHtml(sr.rule)}', '${escHtml(sr.file || '')}')">
+            <span class="btn-icon">✕</span> Remove / Mark as Unsafe
+          </button>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+</details>`;
 }
 
 function buildBranchOverview(result: WorkspaceScanResult): string {
@@ -122,7 +206,7 @@ function buildBranchOverview(result: WorkspaceScanResult): string {
     const scan = scanMap.get(name) || (name === currentBranch ? scanMap.get(`${currentBranch} (working tree)`) : undefined);
     const isCurrent = name === currentBranch;
     const dotClass = isCurrent ? 'dot-current'
-      : scan && scan.threats.length > 0 ? 'dot-infected'
+      : scan && getActiveThreats(scan.threats).length > 0 ? 'dot-infected'
         : 'dot-clean';
     const inlineBadge = scan ? `<span class="bo-inline-badge">${branchStatusBadge(scan)}</span>` : '';
     return `<div class="bo-branch-row${isCurrent ? ' is-current' : ''}">
@@ -167,30 +251,33 @@ function buildBranchOverview(result: WorkspaceScanResult): string {
     </div>
   </summary>
   <div class="bo-body">
-    ${currentBranch ? `
     <div class="bo-current-row">
       <div class="bo-current-left">
-        <span class="bo-current-label">CURRENT BRANCH</span>
-        <span class="bo-current-name">⎇ ${escHtml(currentBranch)}</span>
+        <span class="bo-current-label">Current Working Tree</span>
+        <span class="bo-current-name">${escHtml(currentBranch || 'unknown')}</span>
       </div>
-      <span class="bo-current-badge">${curBadge}</span>
-    </div>` : ''}
+      <div class="bo-current-right">
+        ${curBadge}
+      </div>
+    </div>
     <div class="bo-columns">
       <div class="bo-col">
         <div class="bo-col-header">
-          <span class="bo-col-icon">💻</span>
           <span class="bo-col-title">Local Branches</span>
           <span class="bo-col-count">${localBranches.length}</span>
         </div>
-        <div class="bo-branch-list">${localRows || '<div class="bo-empty">None</div>'}</div>
+        <div class="bo-branch-list">
+          ${localRows}
+        </div>
       </div>
       <div class="bo-col">
         <div class="bo-col-header">
-          <span class="bo-col-icon">☁️</span>
           <span class="bo-col-title">Remote Branches</span>
           <span class="bo-col-count">${remoteBranches.length}</span>
         </div>
-        <div class="bo-branch-list">${remoteRows}</div>
+        <div class="bo-branch-list">
+          ${remoteRows}
+        </div>
       </div>
     </div>
   </div>
@@ -198,17 +285,24 @@ function buildBranchOverview(result: WorkspaceScanResult): string {
 }
 
 export function buildReportHtml(result: WorkspaceScanResult): string {
-  const totalThreats = result.branches.reduce((n, b) => n + b.threats.length, 0);
-  const infectedBranches = result.branches.filter(b => b.threats.length > 0);
-  const cleanBranches = result.branches.filter(b => b.threats.length === 0 && !b.error);
-  const criticalCount = result.branches.reduce((n, b) => n + b.threats.filter(t => t.severity === 'critical').length, 0);
-  const highCount = result.branches.reduce((n, b) => n + b.threats.filter(t => t.severity === 'high').length, 0);
+  const allThreats = result.branches.flatMap(b => b.threats);
+  const activeThreats = getActiveThreats(allThreats);
+  const safeThreats = getSafeThreats(allThreats);
+  const totalThreats = activeThreats.length;
+  const totalSafeThreats = safeThreats.length;
+  const infectedBranches = result.branches.filter(b => getActiveThreats(b.threats).length > 0);
+  const cleanBranches = result.branches.filter(b => getActiveThreats(b.threats).length === 0 && !b.error);
+  const safeBranches = result.branches.filter(b => getSafeThreats(b.threats).length > 0);
+  const criticalCount = activeThreats.filter(t => t.severity === 'critical').length;
+  const highCount = activeThreats.filter(t => t.severity === 'high').length;
   const totalFiles = result.branches.reduce((n, b) => n + b.scannedFiles.length, 0);
 
   const isClean = totalThreats === 0;
-  const summaryTitle = isClean ? '✓ All branches are clean' : `${totalThreats} threat${totalThreats !== 1 ? 's' : ''} found`;
+  const summaryTitle = isClean ? '✓ All branches are clean' : `${totalThreats} active threat${totalThreats !== 1 ? 's' : ''} found`;
   const summarySubtitle = isClean
-    ? `Scanned ${result.branches.length} branch${result.branches.length !== 1 ? 'es' : ''} — no malicious content detected.`
+    ? (totalSafeThreats > 0
+      ? `Scanned ${result.branches.length} branch${result.branches.length !== 1 ? 'es' : ''} (${totalSafeThreats} finding${totalSafeThreats !== 1 ? 's' : ''} marked as safe by user) — no active threats detected.`
+      : `Scanned ${result.branches.length} branch${result.branches.length !== 1 ? 'es' : ''} — no malicious content detected.`)
     : `Across ${infectedBranches.length} infected branch${infectedBranches.length !== 1 ? 'es' : ''}. Do not use infected branches until threats are removed.`;
 
   const localBranches = result.localBranches || [];
@@ -586,7 +680,13 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
 
     .branch-block {
       border: 1px solid var(--border);
-      border-radius: 10px; margin-bottom: 8px; overflow: hidden;
+      border-radius: 10px; margin-bottom: 8px;
+    }
+    .branch-block:not([open]) {
+      overflow: hidden;
+    }
+    .branch-block[open] {
+      overflow: visible;
     }
     .branch-block.infected {
       border-color: var(--border-red);
@@ -729,6 +829,160 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
     /* ─────────────────────────────────────────────
        FOOTER
     ───────────────────────────────────────────── */
+    /* ─────────────────────────────────────────────
+       SAFE / UNSAFE ACTION BUTTONS & DROPDOWNS
+    ───────────────────────────────────────────── */
+    .threat-card.is-safe {
+      background: rgba(74, 222, 128, 0.02);
+    }
+    .safe-badge-pill {
+      font-size: 10px; font-weight: 700; color: var(--green);
+      background: var(--bg-green-soft); border: 1px solid rgba(74, 222, 128, 0.3);
+      padding: 3px 8px; border-radius: 5px; white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .safe-dropdown {
+      position: relative; display: inline-block; z-index: 50;
+    }
+    .safe-dropdown.is-open {
+      z-index: 2000;
+    }
+    .safe-btn, .unsafe-btn {
+      background: var(--bg3); color: var(--text2);
+      border: 1px solid var(--border2);
+      padding: 4px 10px; border-radius: 6px; cursor: pointer;
+      font-size: 11px; font-weight: 600; white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 5px;
+      transition: all 0.14s ease;
+    }
+    .safe-btn:hover, .safe-dropdown.is-open .safe-btn {
+      background: rgba(74, 222, 128, 0.12); color: var(--green);
+      border-color: rgba(74, 222, 128, 0.35);
+    }
+    .caret-icon {
+      font-size: 9px; opacity: 0.7; transition: transform 0.15s ease;
+    }
+    .safe-dropdown.is-open .caret-icon {
+      transform: rotate(180deg);
+    }
+    .unsafe-btn {
+      color: var(--orange); border-color: rgba(251, 146, 60, 0.3);
+      background: rgba(251, 146, 60, 0.08);
+    }
+    .unsafe-btn:hover {
+      background: rgba(251, 146, 60, 0.18); color: #ff9b50;
+      border-color: rgba(251, 146, 60, 0.5);
+    }
+
+    .safe-dropdown-menu {
+      display: none; position: absolute; right: 0; top: calc(100% + 6px);
+      background: #1c1d22;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      z-index: 3000;
+      min-width: 240px;
+      padding: 6px;
+      animation: menuFadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes menuFadeIn {
+      from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .safe-dropdown.is-open .safe-dropdown-menu {
+      display: block;
+    }
+    .safe-menu-header {
+      font-size: 10px; font-weight: 700; color: var(--text3);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 5px 9px 4px;
+    }
+    .safe-menu-item {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; text-align: left; background: none; border: none;
+      padding: 7px 9px; border-radius: 7px; cursor: pointer;
+      color: var(--text);
+      transition: background 0.12s ease;
+    }
+    .safe-menu-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .smi-icon {
+      width: 28px; height: 28px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+    }
+    .smi-project {
+      background: rgba(55, 148, 255, 0.14);
+      border: 1px solid rgba(55, 148, 255, 0.25);
+    }
+    .smi-global {
+      background: rgba(167, 139, 250, 0.14);
+      border: 1px solid rgba(167, 139, 250, 0.25);
+    }
+    .smi-content { flex: 1; min-width: 0; }
+    .smi-title { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.2; }
+    .smi-desc { font-size: 10px; color: var(--text3); margin-top: 2px; line-height: 1.2; }
+    .safe-menu-divider {
+      height: 1px; background: rgba(255, 255, 255, 0.08); margin: 4px 4px;
+    }
+    /* SAFE THREATS ACCORDION IN BRANCH */
+    .safe-threats-details {
+      border-top: 1px solid var(--border);
+      background: rgba(74, 222, 128, 0.02);
+    }
+    .safe-threats-summary {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; cursor: pointer; user-select: none;
+      font-size: 11px; font-weight: 600; color: var(--green);
+      background: rgba(74, 222, 128, 0.05);
+      list-style: none;
+    }
+    .safe-threats-summary::-webkit-details-marker { display: none; }
+    .safe-threats-details[open] > .safe-threats-summary { border-bottom: 1px solid var(--border); }
+    .safe-threats-details[open] > .safe-threats-summary .bo-chevron { transform: rotate(90deg); }
+    .safe-threats-title { flex: 1; }
+    .safe-threats-body { display: flex; flex-direction: column; }
+
+    /* SAFE RULES PANEL */
+    .safe-rules-panel {
+      margin: 16px 28px 0;
+      background: var(--bg2);
+      border: 1px solid rgba(74, 222, 128, 0.25);
+      border-radius: 12px; overflow: hidden;
+    }
+    .safe-rules-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px; background: rgba(74, 222, 128, 0.05);
+      cursor: pointer; user-select: none; list-style: none;
+    }
+    .safe-rules-header::-webkit-details-marker { display: none; }
+    details[open] > .safe-rules-header { border-bottom: 1px solid var(--border); }
+    details[open] > .safe-rules-header .bo-chevron { transform: rotate(90deg); }
+    .safe-rules-count {
+      margin-left: auto; font-size: 10px; font-weight: 700;
+      background: rgba(74, 222, 128, 0.15); color: var(--green);
+      padding: 1px 7px; border-radius: 10px; border: 1px solid rgba(74, 222, 128, 0.3);
+    }
+    .safe-rules-body { padding: 10px 16px; }
+    .safe-rules-list { display: flex; flex-direction: column; gap: 6px; }
+    .safe-rule-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 6px 10px; background: var(--bg3);
+      border: 1px solid var(--border); border-radius: 6px;
+    }
+    .safe-rule-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .safe-rule-file { font-size: 11px; color: var(--text3); font-family: monospace; }
+    .safe-rule-scope-badge {
+      font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 4px;
+    }
+    .scope-project { background: rgba(55, 148, 255, 0.1); color: var(--blue); border: 1px solid rgba(55, 148, 255, 0.25); }
+    .scope-global  { background: rgba(167, 139, 250, 0.1); color: var(--purple); border: 1px solid rgba(167, 139, 250, 0.25); }
+
+    .filter-tag.filter-tag-safe.active {
+      background: #10b981; color: #ffffff; border-color: #10b981;
+    }
+
     .footer {
       padding: 22px 28px 0;
       display: flex; align-items: center; gap: 12px;
@@ -768,7 +1022,7 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
   <div class="stat-tabs">
     <div class="stat-tab">
       <div class="stat-tab-val ${totalThreats > 0 ? 'c-red' : 'c-green'}">${totalThreats}</div>
-      <div class="stat-tab-lbl">Total threats</div>
+      <div class="stat-tab-lbl">Active threats</div>
     </div>
     <div class="stat-tab">
       <div class="stat-tab-val ${criticalCount > 0 ? 'c-red' : 'c-muted'}">${criticalCount}</div>
@@ -777,6 +1031,10 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
     <div class="stat-tab">
       <div class="stat-tab-val ${highCount > 0 ? 'c-orange' : 'c-muted'}">${highCount}</div>
       <div class="stat-tab-lbl">High</div>
+    </div>
+    <div class="stat-tab">
+      <div class="stat-tab-val ${totalSafeThreats > 0 ? 'c-green' : 'c-muted'}">${totalSafeThreats}</div>
+      <div class="stat-tab-lbl">Safe findings</div>
     </div>
     <div class="stat-tab">
       <div class="stat-tab-val ${infectedBranches.length > 0 ? 'c-red' : 'c-green'}">${infectedBranches.length}</div>
@@ -811,6 +1069,8 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
 
 ${buildBranchOverview(result)}
 
+${buildSafeRulesPanel(result.safeRules)}
+
 <div class="branches-section">
   <div class="branches-toolbar">
     <div class="branches-toolbar-left">
@@ -824,6 +1084,7 @@ ${buildBranchOverview(result)}
       <button class="filter-tag" data-filter="remote" onclick="applyFilter('remote')">☁️ Remote</button>
       <button class="filter-tag filter-tag-infected" data-filter="infected" onclick="applyFilter('infected')">🔴 Infected</button>
       <button class="filter-tag filter-tag-clean" data-filter="clean" onclick="applyFilter('clean')">✅ Clean</button>
+      ${safeBranches.length > 0 ? `<button class="filter-tag filter-tag-safe" data-filter="safe" onclick="applyFilter('safe')">🛡️ Safe (${safeBranches.length})</button>` : ''}
     </div>
   </div>
 
@@ -878,13 +1139,50 @@ ${buildBranchOverview(result)}
 
   let activeFilter = { scope: null, status: null };
 
+  function toggleSafeDropdown(e, uid) {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    const container = document.getElementById('dropdown-' + uid);
+    if (!container) return;
+    const isCurrentlyOpen = container.classList.contains('is-open');
+    document.querySelectorAll('.safe-dropdown.is-open').forEach(d => d.classList.remove('is-open'));
+    if (!isCurrentlyOpen) {
+      container.classList.add('is-open');
+    }
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.safe-dropdown')) {
+      document.querySelectorAll('.safe-dropdown.is-open').forEach(d => d.classList.remove('is-open'));
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.safe-dropdown.is-open').forEach(d => d.classList.remove('is-open'));
+    }
+  });
+
+  function markSafe(e, rule, file, scope) {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    document.querySelectorAll('.safe-dropdown.is-open').forEach(d => d.classList.remove('is-open'));
+    vscode.postMessage({ action: 'markSafe', rule, file, scope });
+  }
+
+  function markUnsafe(e, rule, file) {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    vscode.postMessage({ action: 'markUnsafe', rule, file });
+  }
+
   function applyFilter(name) {
     if (name === 'all') {
       activeFilter.scope = null;
       activeFilter.status = null;
     } else if (name === 'local' || name === 'remote') {
       activeFilter.scope = activeFilter.scope === name ? null : name;
-    } else if (name === 'infected' || name === 'clean') {
+    } else if (name === 'infected' || name === 'clean' || name === 'safe') {
       activeFilter.status = activeFilter.status === name ? null : name;
     }
     updateFilterUI();
@@ -897,7 +1195,7 @@ ${buildBranchOverview(result)}
       const f = tag.getAttribute('data-filter');
       if (f === 'all') tag.classList.toggle('active', isAll);
       else if (f === 'local' || f === 'remote') tag.classList.toggle('active', activeFilter.scope === f);
-      else if (f === 'infected' || f === 'clean') tag.classList.toggle('active', activeFilter.status === f);
+      else if (f === 'infected' || f === 'clean' || f === 'safe') tag.classList.toggle('active', activeFilter.status === f);
     });
 
     const blocks = document.querySelectorAll('.branch-block');
@@ -909,8 +1207,14 @@ ${buildBranchOverview(result)}
     blocks.forEach(block => {
       const type = block.getAttribute('data-type');
       const status = block.getAttribute('data-status');
+      const isSafeBranch = block.getAttribute('data-safe') === 'true';
+
       const matchScope = !activeFilter.scope || activeFilter.scope === type;
-      const matchStatus = !activeFilter.status || activeFilter.status === status;
+      let matchStatus = true;
+      if (activeFilter.status === 'infected') matchStatus = status === 'infected';
+      else if (activeFilter.status === 'clean') matchStatus = status === 'clean';
+      else if (activeFilter.status === 'safe') matchStatus = isSafeBranch;
+
       const visible = matchScope && matchStatus;
 
       block.style.display = visible ? '' : 'none';

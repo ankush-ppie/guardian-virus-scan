@@ -33,6 +33,9 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getActiveThreats = getActiveThreats;
+exports.getSafeThreats = getSafeThreats;
+exports.applySafePreferences = applySafePreferences;
 exports.isGitRepo = isGitRepo;
 exports.getCurrentBranch = getCurrentBranch;
 exports.getAllLocalBranches = getAllLocalBranches;
@@ -48,6 +51,7 @@ exports.scanBranch = scanBranch;
 const child_process_1 = require("child_process");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const preferences_1 = require("./preferences");
 const MAX_GIT_OBJECT_BYTES = 8 * 1024 * 1024;
 /** Run Git without a shell so malicious ref or path names cannot inject commands. */
 function runGit(workspacePath, args, maxBuffer = MAX_GIT_OBJECT_BYTES) {
@@ -57,6 +61,30 @@ function runGit(workspacePath, args, maxBuffer = MAX_GIT_OBJECT_BYTES) {
         maxBuffer,
         windowsHide: true,
     });
+}
+function getActiveThreats(threats) {
+    return threats.filter(t => !t.isSafe);
+}
+function getSafeThreats(threats) {
+    return threats.filter(t => t.isSafe);
+}
+function applySafePreferences(result, safeRules) {
+    const updatedBranches = result.branches.map(b => ({
+        ...b,
+        threats: b.threats.map(t => {
+            const match = (0, preferences_1.matchSafeRule)(t.rule, t.file, safeRules);
+            return {
+                ...t,
+                isSafe: !!match,
+                safeScope: match?.scope,
+            };
+        }),
+    }));
+    return {
+        ...result,
+        branches: updatedBranches,
+        safeRules,
+    };
 }
 // ─── Git helpers ──────────────────────────────────────────────────────────────
 function isGitRepo(workspacePath) {

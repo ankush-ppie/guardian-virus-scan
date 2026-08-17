@@ -1,6 +1,7 @@
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { SafeRuleEntry, matchSafeRule } from './preferences';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,10 @@ export interface Threat {
   line?: number;
   /** Up to ~10 lines of source context around the threat, for report display */
   snippet?: string;
+  /** Whether the user marked this finding as safe */
+  isSafe?: boolean;
+  /** Whether marked safe at project or global level */
+  safeScope?: 'project' | 'global';
 }
 
 export interface BranchScanResult {
@@ -46,6 +51,38 @@ export interface WorkspaceScanResult {
   branches: BranchScanResult[];
   scanDurationMs: number;
   version?: string;
+  safeRules?: SafeRuleEntry[];
+}
+
+export function getActiveThreats(threats: Threat[]): Threat[] {
+  return threats.filter(t => !t.isSafe);
+}
+
+export function getSafeThreats(threats: Threat[]): Threat[] {
+  return threats.filter(t => t.isSafe);
+}
+
+export function applySafePreferences(
+  result: WorkspaceScanResult,
+  safeRules: SafeRuleEntry[]
+): WorkspaceScanResult {
+  const updatedBranches = result.branches.map(b => ({
+    ...b,
+    threats: b.threats.map(t => {
+      const match = matchSafeRule(t.rule, t.file, safeRules);
+      return {
+        ...t,
+        isSafe: !!match,
+        safeScope: match?.scope,
+      };
+    }),
+  }));
+
+  return {
+    ...result,
+    branches: updatedBranches,
+    safeRules,
+  };
 }
 
 // ─── Git helpers ──────────────────────────────────────────────────────────────
