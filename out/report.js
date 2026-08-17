@@ -123,8 +123,13 @@ function buildBranchOverview(result) {
         const inlineBadge = scan ? `<span class="bo-inline-badge">${branchStatusBadge(scan)}</span>` : '';
         return `<div class="bo-branch-row${isCurrent ? ' is-current' : ''}">
           <span class="bo-branch-dot ${dotClass}"></span>
-          <span class="bo-branch-name-text" title="${escHtml(name)}">${escHtml(name)}${isCurrent ? ' <span class="bo-star">★</span>' : ''}</span>
-          ${inlineBadge}
+          <span class="bo-branch-name-text">${escHtml(name)}${isCurrent ? ' <span class="bo-star">★</span>' : ''}</span>
+          <div class="bo-row-right">
+            ${inlineBadge}
+            <button class="bo-copy-btn" onclick="copyBranch(event, '${escHtml(name)}', this)" title="Copy branch name">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </button>
+          </div>
         </div>`;
     }).join('');
     const remoteRows = remoteBranches.length === 0
@@ -136,7 +141,12 @@ function buildBranchOverview(result) {
                 : escHtml(name);
             return `<div class="bo-branch-row">
               <span class="bo-branch-dot dot-remote"></span>
-              <span class="bo-branch-name-text" title="${escHtml(name)}">${display}</span>
+              <span class="bo-branch-name-text">${display}</span>
+              <div class="bo-row-right">
+                <button class="bo-copy-btn" onclick="copyBranch(event, '${escHtml(name)}', this)" title="Copy branch name">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
             </div>`;
         }).join('');
     return `
@@ -442,9 +452,7 @@ function buildReportHtml(result) {
       padding: 5px 8px; border-radius: 6px;
       font-family: 'SF Mono','Cascadia Code','Consolas',monospace;
       font-size: 12px; color: var(--text2);
-      transition: background 0.1s;
     }
-    .bo-branch-row:hover { background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.05)); }
     .bo-branch-row.is-current { color: var(--blue); background: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.04)); }
     .bo-branch-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
     .dot-current  { background: var(--blue); }
@@ -452,7 +460,21 @@ function buildReportHtml(result) {
     .dot-clean    { background: var(--green); }
     .dot-remote   { background: var(--text3); }
     .bo-branch-name-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .bo-inline-badge { margin-left: auto; flex-shrink: 0; }
+    .bo-row-right { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .bo-current-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .bo-copy-btn, .branch-copy-btn {
+      background: none; border: 1px solid transparent; color: var(--text3);
+      padding: 3px 5px; border-radius: 4px; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      line-height: 1; opacity: 0.6; transition: all 0.12s ease; flex-shrink: 0;
+    }
+    .bo-copy-btn:hover, .branch-copy-btn:hover {
+      opacity: 1; color: var(--text); background: var(--bg); border-color: var(--border);
+    }
+    .bo-copy-btn.copied, .branch-copy-btn.copied {
+      color: var(--green); border-color: rgba(74, 222, 128, 0.3); background: rgba(74, 222, 128, 0.1); opacity: 1;
+    }
+    .bo-inline-badge { flex-shrink: 0; }
     .bo-star { color: var(--blue); font-size: 10px; }
     .remote-prefix { color: var(--text3); }
     .bo-empty { font-size: 11px; color: var(--text3); font-style: italic; padding: 6px 8px; }
@@ -926,6 +948,29 @@ ${buildBranchOverview(result)}
 
   function reloadWindow() {
     vscode.postMessage({ action: 'reloadWindow' });
+  }
+
+  function copyBranch(e, name, btn) {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    try {
+      navigator.clipboard.writeText(name);
+    } catch (_) {}
+    vscode.postMessage({ action: 'copyText', text: name });
+
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+      btn.classList.add('copied');
+      btn.setAttribute('title', 'Copied!');
+      setTimeout(() => {
+        btn.innerHTML = orig;
+        btn.classList.remove('copied');
+        btn.setAttribute('title', 'Copy branch name');
+      }, 1500);
+    }
   }
 
   function openFile(e, btn) {

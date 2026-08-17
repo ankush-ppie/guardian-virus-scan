@@ -172,6 +172,13 @@ function showReport(result, context) {
             vscode.commands.executeCommand('workbench.action.reloadWindow');
             return;
         }
+        if (msg.action === 'copyText') {
+            if (msg.text) {
+                await vscode.env.clipboard.writeText(msg.text);
+                vscode.window.setStatusBarMessage(`Copied "${msg.text}" to clipboard`, 2000);
+            }
+            return;
+        }
         if (msg.action === 'openFile') {
             if (latestResult) {
                 await openThreatFile(context, latestResult.workspacePath, msg.file, msg.line, msg.branch);

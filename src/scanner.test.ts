@@ -160,6 +160,10 @@ function testBranchOverviewReport(): void {
   assert.ok(html.includes('reload-link-btn'), 'Header should contain reload-link-btn');
   assert.ok(html.includes('Reload Window'), 'Header should contain Reload Window button');
   assert.ok(html.includes('title="Cmd+Shift+P → Developer: Reload Window"'), 'Header reload button should have command tooltip');
+
+  // 7: Copy branch buttons (only in Branch Overview lists)
+  assert.ok(html.includes('bo-copy-btn'), 'Branch overview items should have copy buttons');
+  assert.ok(html.includes('copyBranch(event,'), 'Copy buttons should invoke copyBranch helper');
 }
 
 testInjectedConfigFamilies();
