@@ -307,6 +307,8 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
 
   const localBranches = result.localBranches || [];
   const remoteBranches = result.remoteBranches || [];
+  const localBranchCount = result.branches.filter(b => !isRemoteBranch(b.branch, localBranches, remoteBranches)).length;
+  const remoteBranchCount = result.branches.filter(b => isRemoteBranch(b.branch, localBranches, remoteBranches)).length;
   const projectBadge = `<span class="proj-badge proj-${result.projectType}">${result.projectType.charAt(0).toUpperCase() + result.projectType.slice(1)}</span>`;
 
   return `<!DOCTYPE html>
@@ -603,12 +605,21 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
     .branches-filter-count {
       font-size: 11px; color: var(--text3);
     }
-    .branches-filter-tags {
-      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    .branches-filter-controls {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     }
-    .filter-tag-label {
+    .filter-group {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .filter-group-label {
       font-size: 10px; font-weight: 700; color: var(--text3);
-      margin-right: 2px; text-transform: uppercase; letter-spacing: 0.06em;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .filter-group-buttons {
+      display: flex; align-items: center; gap: 4px;
+    }
+    .filter-group-divider {
+      width: 1px; height: 16px; background: var(--border);
     }
     .filter-tag {
       font-size: 11px; font-weight: 600;
@@ -634,6 +645,12 @@ export function buildReportHtml(result: WorkspaceScanResult): string {
     }
     .filter-tag.filter-tag-clean.active {
       background: #16a34a; color: #ffffff; border-color: #16a34a;
+    }
+    .filter-tag.filter-tag-safe.active {
+      background: var(--purple); color: #ffffff; border-color: var(--purple);
+    }
+    .tag-count {
+      font-size: 10px; font-weight: 700; opacity: 0.85; margin-left: 2px;
     }
     .filter-empty-state {
       display: none; padding: 28px 16px; text-align: center;
@@ -1077,20 +1094,31 @@ ${buildSafeRulesPanel(result.safeRules)}
       <span class="branches-toolbar-title">Branches</span>
       <span class="branches-filter-count" id="filter-count">Showing all ${result.branches.length} branches</span>
     </div>
-    <div class="branches-filter-tags">
-      <span class="filter-tag-label">Filter:</span>
-      <button class="filter-tag active" data-filter="all" onclick="applyFilter('all')">All</button>
-      <button class="filter-tag" data-filter="local" onclick="applyFilter('local')">💻 Local</button>
-      <button class="filter-tag" data-filter="remote" onclick="applyFilter('remote')">☁️ Remote</button>
-      <button class="filter-tag filter-tag-infected" data-filter="infected" onclick="applyFilter('infected')">🔴 Infected</button>
-      <button class="filter-tag filter-tag-clean" data-filter="clean" onclick="applyFilter('clean')">✅ Clean</button>
-      ${safeBranches.length > 0 ? `<button class="filter-tag filter-tag-safe" data-filter="safe" onclick="applyFilter('safe')">🛡️ Safe (${safeBranches.length})</button>` : ''}
+    <div class="branches-filter-controls">
+      <div class="filter-group">
+        <span class="filter-group-label">Scope:</span>
+        <div class="filter-group-buttons">
+          <button class="filter-tag active" data-group="scope" data-value="all" onclick="setScopeFilter('all')">All <span class="tag-count">(${result.branches.length})</span></button>
+          <button class="filter-tag" data-group="scope" data-value="local" onclick="setScopeFilter('local')">💻 Local <span class="tag-count">(${localBranchCount})</span></button>
+          ${remoteBranchCount > 0 ? `<button class="filter-tag" data-group="scope" data-value="remote" onclick="setScopeFilter('remote')">☁️ Remote <span class="tag-count">(${remoteBranchCount})</span></button>` : ''}
+        </div>
+      </div>
+      <div class="filter-group-divider"></div>
+      <div class="filter-group">
+        <span class="filter-group-label">Status:</span>
+        <div class="filter-group-buttons">
+          <button class="filter-tag active" data-group="status" data-value="all" onclick="setStatusFilter('all')">All</button>
+          <button class="filter-tag filter-tag-infected" data-group="status" data-value="infected" onclick="setStatusFilter('infected')">🔴 Infected <span class="tag-count">(${infectedBranches.length})</span></button>
+          <button class="filter-tag filter-tag-clean" data-group="status" data-value="clean" onclick="setStatusFilter('clean')">✅ Clean <span class="tag-count">(${cleanBranches.length})</span></button>
+          ${safeBranches.length > 0 ? `<button class="filter-tag filter-tag-safe" data-group="status" data-value="safe" onclick="setStatusFilter('safe')">🛡️ Safe <span class="tag-count">(${safeBranches.length})</span></button>` : ''}
+        </div>
+      </div>
     </div>
   </div>
 
   <div id="filter-empty-state" class="filter-empty-state">
     <p>No branches match the selected filter.</p>
-    <button class="filter-reset-btn" onclick="applyFilter('all')">Reset filter</button>
+    <button class="filter-reset-btn" onclick="resetAllFilters()">Reset filters</button>
   </div>
 
   ${infectedBranches.length > 0 ? `
@@ -1137,8 +1165,6 @@ ${buildSafeRulesPanel(result.safeRules)}
 <script>
   const vscode = acquireVsCodeApi();
 
-  let activeFilter = { scope: null, status: null };
-
   function toggleSafeDropdown(e, uid) {
     if (e) {
       e.stopPropagation();
@@ -1176,26 +1202,44 @@ ${buildSafeRulesPanel(result.safeRules)}
     vscode.postMessage({ action: 'markUnsafe', rule, file });
   }
 
-  function applyFilter(name) {
-    if (name === 'all') {
-      activeFilter.scope = null;
-      activeFilter.status = null;
-    } else if (name === 'local' || name === 'remote') {
-      activeFilter.scope = activeFilter.scope === name ? null : name;
-    } else if (name === 'infected' || name === 'clean' || name === 'safe') {
-      activeFilter.status = activeFilter.status === name ? null : name;
-    }
+  let currentScopeFilter = 'all';
+  let currentStatusFilter = 'all';
+
+  function setScopeFilter(scope) {
+    currentScopeFilter = scope || 'all';
     updateFilterUI();
   }
 
-  function updateFilterUI() {
-    const isAll = !activeFilter.scope && !activeFilter.status;
+  function setStatusFilter(status) {
+    currentStatusFilter = status || 'all';
+    updateFilterUI();
+  }
 
-    document.querySelectorAll('.filter-tag').forEach(tag => {
-      const f = tag.getAttribute('data-filter');
-      if (f === 'all') tag.classList.toggle('active', isAll);
-      else if (f === 'local' || f === 'remote') tag.classList.toggle('active', activeFilter.scope === f);
-      else if (f === 'infected' || f === 'clean' || f === 'safe') tag.classList.toggle('active', activeFilter.status === f);
+  function resetAllFilters() {
+    currentScopeFilter = 'all';
+    currentStatusFilter = 'all';
+    updateFilterUI();
+  }
+
+  function applyFilter(name) {
+    if (name === 'all') {
+      resetAllFilters();
+    } else if (name === 'local' || name === 'remote') {
+      setScopeFilter(name);
+    } else if (name === 'infected' || name === 'clean' || name === 'safe') {
+      setStatusFilter(name);
+    }
+  }
+
+  function updateFilterUI() {
+    document.querySelectorAll('.filter-tag[data-group="scope"]').forEach(tag => {
+      const v = tag.getAttribute('data-value');
+      tag.classList.toggle('active', v === currentScopeFilter);
+    });
+
+    document.querySelectorAll('.filter-tag[data-group="status"]').forEach(tag => {
+      const v = tag.getAttribute('data-value');
+      tag.classList.toggle('active', v === currentStatusFilter);
     });
 
     const blocks = document.querySelectorAll('.branch-block');
@@ -1207,22 +1251,48 @@ ${buildSafeRulesPanel(result.safeRules)}
     blocks.forEach(block => {
       const type = block.getAttribute('data-type');
       const status = block.getAttribute('data-status');
-      const isSafeBranch = block.getAttribute('data-safe') === 'true';
+      const hasSafe = block.getAttribute('data-safe') === 'true';
 
-      const matchScope = !activeFilter.scope || activeFilter.scope === type;
+      const matchScope = (currentScopeFilter === 'all') || (currentScopeFilter === type);
       let matchStatus = true;
-      if (activeFilter.status === 'infected') matchStatus = status === 'infected';
-      else if (activeFilter.status === 'clean') matchStatus = status === 'clean';
-      else if (activeFilter.status === 'safe') matchStatus = isSafeBranch;
+      if (currentStatusFilter === 'infected') {
+        matchStatus = (status === 'infected');
+      } else if (currentStatusFilter === 'clean') {
+        matchStatus = (status === 'clean');
+      } else if (currentStatusFilter === 'safe') {
+        matchStatus = hasSafe;
+      }
 
       const visible = matchScope && matchStatus;
-
       block.style.display = visible ? '' : 'none';
+
       if (visible) {
         visibleTotal++;
         if (status === 'infected') visibleInfected++;
         else if (status === 'clean') visibleClean++;
         else if (status === 'error') visibleError++;
+
+        const activeCards = block.querySelectorAll('.threat-card:not(.is-safe)');
+        const safeDetails = block.querySelector('.safe-threats-details');
+        const cleanMsg = block.querySelector('.clean-msg');
+
+        if (currentStatusFilter === 'safe') {
+          block.open = true;
+          activeCards.forEach(c => c.style.display = 'none');
+          if (cleanMsg) cleanMsg.style.display = 'none';
+          if (safeDetails) {
+            safeDetails.style.display = 'block';
+            safeDetails.open = true;
+          }
+        } else if (currentStatusFilter === 'infected') {
+          activeCards.forEach(c => c.style.display = '');
+          if (cleanMsg) cleanMsg.style.display = '';
+          if (safeDetails) safeDetails.style.display = 'none';
+        } else {
+          activeCards.forEach(c => c.style.display = '');
+          if (cleanMsg) cleanMsg.style.display = '';
+          if (safeDetails) safeDetails.style.display = '';
+        }
       }
     });
 
@@ -1238,7 +1308,7 @@ ${buildSafeRulesPanel(result.safeRules)}
       if (c) c.textContent = visibleInfected;
     }
     if (cleanHeader) {
-      cleanHeader.style.display = visibleClean > 0 ? '' : 'none';
+      cleanHeader.style.display = (visibleClean > 0 || (currentStatusFilter === 'safe' && visibleTotal > 0)) ? '' : 'none';
       const c = document.getElementById('clean-visible-count');
       if (c) c.textContent = visibleClean;
     }
@@ -1250,7 +1320,8 @@ ${buildSafeRulesPanel(result.safeRules)}
 
     if (emptyState) emptyState.style.display = visibleTotal === 0 ? 'block' : 'none';
     if (countLabel) {
-      countLabel.textContent = isAll
+      const isDefault = currentScopeFilter === 'all' && currentStatusFilter === 'all';
+      countLabel.textContent = isDefault
         ? ('Showing all ' + visibleTotal + ' branches')
         : ('Showing ' + visibleTotal + ' of ' + blocks.length + ' branches');
     }

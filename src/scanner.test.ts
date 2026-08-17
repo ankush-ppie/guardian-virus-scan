@@ -143,11 +143,11 @@ function testBranchOverviewReport(): void {
   assert.ok(html.includes('bo-chip-counts'), 'Should use bo-chip-counts class for combined chip');
 
   // 4: Filter toolbar and tags
-  assert.ok(html.includes('data-filter="all"'), 'Filter toolbar should contain "all" filter');
-  assert.ok(html.includes('data-filter="local"'), 'Filter toolbar should contain "local" filter');
-  assert.ok(html.includes('data-filter="remote"'), 'Filter toolbar should contain "remote" filter');
-  assert.ok(html.includes('data-filter="infected"'), 'Filter toolbar should contain "infected" filter');
-  assert.ok(html.includes('data-filter="clean"'), 'Filter toolbar should contain "clean" filter');
+  assert.ok(html.includes('data-value="all"'), 'Filter toolbar should contain "all" filter');
+  assert.ok(html.includes('data-value="local"'), 'Filter toolbar should contain "local" filter');
+  assert.ok(html.includes('data-value="remote"'), 'Filter toolbar should contain "remote" filter');
+  assert.ok(html.includes('data-value="infected"'), 'Filter toolbar should contain "infected" filter');
+  assert.ok(html.includes('data-value="clean"'), 'Filter toolbar should contain "clean" filter');
 
   // 5: Branch items have type & status attributes and scope tags
   assert.ok(html.includes('data-type="local"'), 'Local branches must have data-type="local"');
@@ -260,7 +260,7 @@ async function testSafeRulesPreferences() {
   assert.ok(html.includes('Marked Safe (Global)'), 'Report should render global safe badge');
   assert.ok(html.includes('Mark as Unsafe'), 'Report should render Mark as Unsafe buttons');
   assert.ok(html.includes('Whitelisted Rules (Marked as Safe)'), 'Report should display Whitelisted Rules panel');
-  assert.ok(html.includes('data-filter="safe"'), 'Report toolbar should include Safe filter tag');
+  assert.ok(html.includes('data-value="safe"'), 'Report toolbar should include Safe filter tag');
   assert.ok(html.includes('markSafe('), 'Report script should define markSafe');
   assert.ok(html.includes('markUnsafe('), 'Report script should define markUnsafe');
 
