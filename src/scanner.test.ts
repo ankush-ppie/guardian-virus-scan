@@ -107,7 +107,7 @@ function testBranchOverviewReport(): void {
     remoteBranches: ['origin', 'origin/main'],
     branches: [
       {
-        branch: 'main',
+        branch: 'main (working tree)',
         isCurrentBranch: true,
         threats: [],
         scannedFiles: ['package.json'],
@@ -141,6 +141,20 @@ function testBranchOverviewReport(): void {
   // 3: Local & remote managed in 1 single chip like "1 Local • 2 Remote"
   assert.ok(html.includes('1 Local • 2 Remote'), 'Should contain "1 Local • 2 Remote" in chip');
   assert.ok(html.includes('bo-chip-counts'), 'Should use bo-chip-counts class for combined chip');
+
+  // 4: Filter toolbar and tags
+  assert.ok(html.includes('data-filter="all"'), 'Filter toolbar should contain "all" filter');
+  assert.ok(html.includes('data-filter="local"'), 'Filter toolbar should contain "local" filter');
+  assert.ok(html.includes('data-filter="remote"'), 'Filter toolbar should contain "remote" filter');
+  assert.ok(html.includes('data-filter="infected"'), 'Filter toolbar should contain "infected" filter');
+  assert.ok(html.includes('data-filter="clean"'), 'Filter toolbar should contain "clean" filter');
+
+  // 5: Branch items have type & status attributes and scope tags
+  assert.ok(html.includes('data-type="local"'), 'Local branches must have data-type="local"');
+  assert.ok(html.includes('data-type="remote"'), 'Remote branches must have data-type="remote"');
+  assert.ok(html.includes('branch-scope-tag tag-local'), 'Local branch must have Local scope tag');
+  assert.ok(html.includes('branch-scope-tag tag-remote'), 'Remote branch must have Remote scope tag');
+  assert.ok(html.includes('main (working tree)'), 'Current branch should be represented as main (working tree)');
 }
 
 testInjectedConfigFamilies();

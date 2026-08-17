@@ -71,19 +71,31 @@ function threatCard(t, branch, uid) {
       </div>
     </div>`;
 }
-function branchSection(r) {
+function isRemoteBranch(branchName, localBranches, remoteBranches) {
+    if (branchName.endsWith(' (working tree)'))
+        return false;
+    if (remoteBranches.includes(branchName))
+        return true;
+    if (localBranches.includes(branchName))
+        return false;
+    return branchName.includes('/');
+}
+function branchSection(r, isRemote = false) {
     const isClean = r.threats.length === 0 && !r.error;
     const isInfected = r.threats.length > 0;
+    const status = isInfected ? 'infected' : isClean ? 'clean' : 'error';
+    const type = isRemote ? 'remote' : 'local';
     const cards = r.threats
         .map((t, i) => threatCard(t, r.branch, `${r.branch.replace(/[^a-zA-Z0-9]/g, '_')}_${i}`))
         .join('');
     return `
-  <details class="branch-block ${isInfected ? 'infected' : isClean ? 'clean' : 'error'}" ${isInfected ? 'open' : ''}>
+  <details class="branch-block ${status}" data-type="${type}" data-status="${status}" ${isInfected ? 'open' : ''}>
     <summary class="branch-summary">
       <span class="branch-chevron">▶</span>
       <span class="branch-icon">⎇</span>
       <span class="branch-name">${escHtml(r.branch)}${r.isCurrentBranch ? ' <span class="current-tag">current</span>' : ''}</span>
       <div class="branch-right">
+        <span class="branch-scope-tag ${isRemote ? 'tag-remote' : 'tag-local'}" onclick="event.stopPropagation(); applyFilter('${type}')">${isRemote ? 'Remote' : 'Local'}</span>
         ${branchStatusBadge(r)}
         <span class="branch-meta">${r.scannedFiles.length} file${r.scannedFiles.length !== 1 ? 's' : ''} scanned</span>
       </div>
@@ -100,10 +112,10 @@ function buildBranchOverview(result) {
     const currentBranch = result.currentBranch || '';
     const localBranches = result.localBranches || result.branches.map(b => b.branch);
     const remoteBranches = result.remoteBranches || [];
-    const curScan = scanMap.get(currentBranch);
+    const curScan = scanMap.get(`${currentBranch} (working tree)`) || scanMap.get(currentBranch);
     const curBadge = curScan ? branchStatusBadge(curScan) : '';
     const localRows = localBranches.map(name => {
-        const scan = scanMap.get(name);
+        const scan = scanMap.get(name) || (name === currentBranch ? scanMap.get(`${currentBranch} (working tree)`) : undefined);
         const isCurrent = name === currentBranch;
         const dotClass = isCurrent ? 'dot-current'
             : scan && scan.threats.length > 0 ? 'dot-infected'
@@ -180,6 +192,8 @@ function buildReportHtml(result) {
     const summarySubtitle = isClean
         ? `Scanned ${result.branches.length} branch${result.branches.length !== 1 ? 'es' : ''} — no malicious content detected.`
         : `Across ${infectedBranches.length} infected branch${infectedBranches.length !== 1 ? 'es' : ''}. Do not use infected branches until threats are removed.`;
+    const localBranches = result.localBranches || [];
+    const remoteBranches = result.remoteBranches || [];
     const projectBadge = `<span class="proj-badge proj-${result.projectType}">${result.projectType.charAt(0).toUpperCase() + result.projectType.slice(1)}</span>`;
     return `<!DOCTYPE html>
 <html>
@@ -398,12 +412,83 @@ function buildReportHtml(result) {
     .bo-empty { font-size: 11px; color: var(--text3); font-style: italic; padding: 6px 8px; }
 
     /* ─────────────────────────────────────────────
-       BRANCH SECTIONS
+       BRANCH FILTER TOOLBAR & SECTIONS
     ───────────────────────────────────────────── */
     .branches-section { padding: 16px 28px 0; }
+    .branches-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-top: 22px; margin-bottom: 12px;
+      padding-bottom: 10px; border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .branches-toolbar-left {
+      display: flex; align-items: baseline; gap: 8px;
+    }
+    .branches-toolbar-title {
+      font-size: 12px; font-weight: 700; color: var(--text);
+      letter-spacing: -0.01em; text-transform: uppercase;
+    }
+    .branches-filter-count {
+      font-size: 11px; color: var(--text3);
+    }
+    .branches-filter-tags {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .filter-tag-label {
+      font-size: 10px; font-weight: 700; color: var(--text3);
+      margin-right: 2px; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .filter-tag {
+      font-size: 11px; font-weight: 600;
+      padding: 3px 10px; border-radius: 6px;
+      background: var(--bg3); color: var(--text2);
+      border: 1px solid var(--border);
+      cursor: pointer; user-select: none;
+      transition: all 0.12s ease;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .filter-tag:hover {
+      background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.08));
+      color: var(--text); border-color: var(--border2);
+    }
+    .filter-tag.active {
+      background: var(--vscode-button-background, #0e639c);
+      color: var(--vscode-button-foreground, #ffffff);
+      border-color: var(--vscode-button-background, #0e639c);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    }
+    .filter-tag.filter-tag-infected.active {
+      background: var(--red); color: #ffffff; border-color: var(--red);
+    }
+    .filter-tag.filter-tag-clean.active {
+      background: #16a34a; color: #ffffff; border-color: #16a34a;
+    }
+    .filter-empty-state {
+      display: none; padding: 28px 16px; text-align: center;
+      color: var(--text3); font-size: 12px;
+      background: var(--bg2); border: 1px dashed var(--border); border-radius: 8px;
+      margin: 16px 0;
+    }
+    .filter-reset-btn {
+      margin-top: 8px; background: transparent; border: 1px solid var(--blue);
+      color: var(--blue); border-radius: 4px; padding: 3px 10px;
+      font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .filter-reset-btn:hover { background: rgba(55, 148, 255, 0.1); }
+
+    /* Branch row type tag */
+    .branch-scope-tag {
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      padding: 2px 7px; border-radius: 4px; letter-spacing: 0.05em;
+      white-space: nowrap; cursor: pointer; transition: all 0.12s;
+    }
+    .branch-scope-tag:hover { opacity: 0.85; transform: scale(1.04); }
+    .tag-local  { background: rgba(167, 139, 250, 0.12); color: var(--purple); border: 1px solid rgba(167, 139, 250, 0.3); }
+    .tag-remote { background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
+
     .section-header {
       display: flex; align-items: center; gap: 8px;
-      margin-bottom: 10px; margin-top: 22px;
+      margin-bottom: 10px; margin-top: 18px;
     }
     .section-icon { font-size: 13px; }
     .section-label {
@@ -656,34 +741,54 @@ function buildReportHtml(result) {
 ${buildBranchOverview(result)}
 
 <div class="branches-section">
+  <div class="branches-toolbar">
+    <div class="branches-toolbar-left">
+      <span class="branches-toolbar-title">Branches</span>
+      <span class="branches-filter-count" id="filter-count">Showing all ${result.branches.length} branches</span>
+    </div>
+    <div class="branches-filter-tags">
+      <span class="filter-tag-label">Filter:</span>
+      <button class="filter-tag active" data-filter="all" onclick="applyFilter('all')">All</button>
+      <button class="filter-tag" data-filter="local" onclick="applyFilter('local')">💻 Local</button>
+      <button class="filter-tag" data-filter="remote" onclick="applyFilter('remote')">☁️ Remote</button>
+      <button class="filter-tag filter-tag-infected" data-filter="infected" onclick="applyFilter('infected')">🔴 Infected</button>
+      <button class="filter-tag filter-tag-clean" data-filter="clean" onclick="applyFilter('clean')">✅ Clean</button>
+    </div>
+  </div>
+
+  <div id="filter-empty-state" class="filter-empty-state">
+    <p>No branches match the selected filter.</p>
+    <button class="filter-reset-btn" onclick="applyFilter('all')">Reset filter</button>
+  </div>
+
   ${infectedBranches.length > 0 ? `
-    <div class="section-header">
+    <div class="section-header" id="infected-section-header">
       <span class="section-icon">🔴</span>
       <span class="section-label">Infected Branches</span>
-      <span class="section-count red">${infectedBranches.length}</span>
+      <span class="section-count red" id="infected-visible-count">${infectedBranches.length}</span>
       <div class="section-divider"></div>
     </div>
-    ${infectedBranches.map(branchSection).join('')}
+    ${infectedBranches.map(b => branchSection(b, isRemoteBranch(b.branch, localBranches, remoteBranches))).join('')}
   ` : ''}
 
   ${cleanBranches.length > 0 ? `
-    <div class="section-header">
+    <div class="section-header" id="clean-section-header">
       <span class="section-icon">✅</span>
       <span class="section-label">Clean Branches</span>
-      <span class="section-count green">${cleanBranches.length}</span>
+      <span class="section-count green" id="clean-visible-count">${cleanBranches.length}</span>
       <div class="section-divider"></div>
     </div>
-    ${cleanBranches.map(branchSection).join('')}
+    ${cleanBranches.map(b => branchSection(b, isRemoteBranch(b.branch, localBranches, remoteBranches))).join('')}
   ` : ''}
 
   ${result.branches.filter(b => b.error).length > 0 ? `
-    <div class="section-header">
+    <div class="section-header" id="error-section-header">
       <span class="section-icon">⚠️</span>
       <span class="section-label">Errors</span>
-      <span class="section-count muted">${result.branches.filter(b => b.error).length}</span>
+      <span class="section-count muted" id="error-visible-count">${result.branches.filter(b => b.error).length}</span>
       <div class="section-divider"></div>
     </div>
-    ${result.branches.filter(b => b.error).map(branchSection).join('')}
+    ${result.branches.filter(b => b.error).map(b => branchSection(b, isRemoteBranch(b.branch, localBranches, remoteBranches))).join('')}
   ` : ''}
 </div>
 
@@ -699,6 +804,82 @@ ${buildBranchOverview(result)}
 
 <script>
   const vscode = acquireVsCodeApi();
+
+  let activeFilter = { scope: null, status: null };
+
+  function applyFilter(name) {
+    if (name === 'all') {
+      activeFilter.scope = null;
+      activeFilter.status = null;
+    } else if (name === 'local' || name === 'remote') {
+      activeFilter.scope = activeFilter.scope === name ? null : name;
+    } else if (name === 'infected' || name === 'clean') {
+      activeFilter.status = activeFilter.status === name ? null : name;
+    }
+    updateFilterUI();
+  }
+
+  function updateFilterUI() {
+    const isAll = !activeFilter.scope && !activeFilter.status;
+
+    document.querySelectorAll('.filter-tag').forEach(tag => {
+      const f = tag.getAttribute('data-filter');
+      if (f === 'all') tag.classList.toggle('active', isAll);
+      else if (f === 'local' || f === 'remote') tag.classList.toggle('active', activeFilter.scope === f);
+      else if (f === 'infected' || f === 'clean') tag.classList.toggle('active', activeFilter.status === f);
+    });
+
+    const blocks = document.querySelectorAll('.branch-block');
+    let visibleTotal = 0;
+    let visibleInfected = 0;
+    let visibleClean = 0;
+    let visibleError = 0;
+
+    blocks.forEach(block => {
+      const type = block.getAttribute('data-type');
+      const status = block.getAttribute('data-status');
+      const matchScope = !activeFilter.scope || activeFilter.scope === type;
+      const matchStatus = !activeFilter.status || activeFilter.status === status;
+      const visible = matchScope && matchStatus;
+
+      block.style.display = visible ? '' : 'none';
+      if (visible) {
+        visibleTotal++;
+        if (status === 'infected') visibleInfected++;
+        else if (status === 'clean') visibleClean++;
+        else if (status === 'error') visibleError++;
+      }
+    });
+
+    const infHeader = document.getElementById('infected-section-header');
+    const cleanHeader = document.getElementById('clean-section-header');
+    const errHeader = document.getElementById('error-section-header');
+    const emptyState = document.getElementById('filter-empty-state');
+    const countLabel = document.getElementById('filter-count');
+
+    if (infHeader) {
+      infHeader.style.display = visibleInfected > 0 ? '' : 'none';
+      const c = document.getElementById('infected-visible-count');
+      if (c) c.textContent = visibleInfected;
+    }
+    if (cleanHeader) {
+      cleanHeader.style.display = visibleClean > 0 ? '' : 'none';
+      const c = document.getElementById('clean-visible-count');
+      if (c) c.textContent = visibleClean;
+    }
+    if (errHeader) {
+      errHeader.style.display = visibleError > 0 ? '' : 'none';
+      const c = document.getElementById('error-visible-count');
+      if (c) c.textContent = visibleError;
+    }
+
+    if (emptyState) emptyState.style.display = visibleTotal === 0 ? 'block' : 'none';
+    if (countLabel) {
+      countLabel.textContent = isAll
+        ? ('Showing all ' + visibleTotal + ' branches')
+        : ('Showing ' + visibleTotal + ' of ' + blocks.length + ' branches');
+    }
+  }
 
   function rescan() {
     vscode.postMessage({ action: 'rescan' });

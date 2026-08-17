@@ -37,9 +37,10 @@ async function runFullScan(
 
   // Remote-tracking refs are already present in the local Git object database;
   // scanning them requires no checkout, fetch, or network access.
-  const refsToScan = [...new Set([...branches, ...remoteBranches])];
+  // Exclude currentBranch because scanWorkingTree already scans the working tree for currentBranch.
+  const refsToScan = [...new Set([...branches, ...remoteBranches])].filter(b => b !== currentBranch);
 
-  if (refsToScan.length === 0) {
+  if (branches.length === 0 && remoteBranches.length === 0) {
     throw new Error('No local or remote-tracking branches found.');
   }
 
@@ -50,7 +51,7 @@ async function runFullScan(
   const results: WorkspaceScanResult['branches'] = [];
   progress.report({ message: 'Scanning current working tree (including ignored/untracked security files)' });
   results.push(scanWorkingTree(workspacePath, currentBranch, projectType));
-  const step = 100 / refsToScan.length;
+  const step = refsToScan.length > 0 ? 100 / refsToScan.length : 100;
 
   for (let i = 0; i < refsToScan.length; i++) {
     if (token.isCancellationRequested) break;
