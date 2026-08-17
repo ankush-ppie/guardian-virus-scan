@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { scanBranch, scanInjectedConfig, scanPropagationScript, scanWorkingTree } from './scanner';
+import { scanBranch, scanInjectedConfig, scanPropagationScript, scanWorkingTree, WorkspaceScanResult } from './scanner';
+import { buildReportHtml } from './report';
 
 function rules(threats: Array<{ rule: string }>): string[] {
   return threats.map(t => t.rule).sort();
@@ -97,8 +98,54 @@ function testRemoteTrackingRefCoverage(): void {
   }
 }
 
+function testBranchOverviewReport(): void {
+  const mockResult: WorkspaceScanResult = {
+    workspacePath: '/mock/project',
+    projectType: 'node',
+    currentBranch: 'main',
+    localBranches: ['main'],
+    remoteBranches: ['origin', 'origin/main'],
+    branches: [
+      {
+        branch: 'main',
+        isCurrentBranch: true,
+        threats: [],
+        scannedFiles: ['package.json'],
+      },
+      {
+        branch: 'origin',
+        isCurrentBranch: false,
+        threats: [],
+        scannedFiles: [],
+      },
+      {
+        branch: 'origin/main',
+        isCurrentBranch: false,
+        threats: [],
+        scannedFiles: [],
+      },
+    ],
+    scanDurationMs: 50,
+    version: '1.1.0',
+  };
+
+  const html = buildReportHtml(mockResult);
+
+  // 1: Default it should be collapsed (no 'open' attribute on details.branch-overview)
+  assert.ok(html.includes('<details class="branch-overview">'), 'Branch overview should not have "open" attribute by default');
+  assert.ok(!html.includes('<details class="branch-overview" open>'), 'Branch overview must be collapsed by default');
+
+  // 2: Chip click should not toggle collapse/expand (preventDefault & stopPropagation on bo-chips)
+  assert.ok(html.includes('<div class="bo-chips" onclick="event.preventDefault(); event.stopPropagation()">'), 'bo-chips must have onclick event.preventDefault(); event.stopPropagation()');
+
+  // 3: Local & remote managed in 1 single chip like "1 Local • 2 Remote"
+  assert.ok(html.includes('1 Local • 2 Remote'), 'Should contain "1 Local • 2 Remote" in chip');
+  assert.ok(html.includes('bo-chip-counts'), 'Should use bo-chip-counts class for combined chip');
+}
+
 testInjectedConfigFamilies();
 testPropagationScript();
 testWorkingTreeCoverage();
 testRemoteTrackingRefCoverage();
+testBranchOverviewReport();
 console.log('Guardian scanner regression tests passed.');

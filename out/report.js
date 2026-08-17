@@ -128,15 +128,14 @@ function buildBranchOverview(result) {
             </div>`;
         }).join('');
     return `
-<details class="branch-overview" open>
+<details class="branch-overview">
   <summary class="bo-header">
     <span class="bo-chevron">▶</span>
     <span class="bo-title-icon">⎇</span>
     <span class="bo-title">Branch Overview</span>
-    <div class="bo-chips">
+    <div class="bo-chips" onclick="event.preventDefault(); event.stopPropagation()">
       ${currentBranch ? `<span class="bo-chip bo-chip-current">⎇ ${escHtml(currentBranch)}</span>` : ''}
-      <span class="bo-chip bo-chip-local">${localBranches.length} local</span>
-      ${remoteBranches.length > 0 ? `<span class="bo-chip bo-chip-remote">${remoteBranches.length} remote</span>` : ''}
+      <span class="bo-chip bo-chip-counts">${localBranches.length} Local • ${remoteBranches.length} Remote</span>
     </div>
   </summary>
   <div class="bo-body">
@@ -335,20 +334,22 @@ function buildReportHtml(result) {
       display: flex; align-items: center; gap: 8px;
       padding: 11px 16px;
       background: var(--bg3);
-      border-bottom: 1px solid var(--border);
       cursor: pointer; user-select: none; list-style: none;
     }
     .bo-header::-webkit-details-marker { display: none; }
+    details[open] > .bo-header { border-bottom: 1px solid var(--border); }
     details[open] > .bo-header .bo-chevron { transform: rotate(90deg); }
     .bo-chevron { color: var(--text3); font-size: 8px; transition: transform 0.18s; display: inline-block; flex-shrink: 0; }
     .bo-title-icon { color: var(--text3); font-size: 13px; }
     .bo-title { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; }
-    .bo-chips { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+    .bo-chips { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; cursor: default; }
     .bo-chip {
       font-size: 10px; font-weight: 600;
       padding: 2px 9px; border-radius: 20px; white-space: nowrap;
+      cursor: default;
     }
     .bo-chip-current { background: rgba(55, 148, 255, 0.1); color: var(--blue);   border: 1px solid rgba(55, 148, 255, 0.25); }
+    .bo-chip-counts  { background: rgba(167, 139, 250, 0.1); color: var(--purple); border: 1px solid rgba(167, 139, 250, 0.25); }
     .bo-chip-local   { background: rgba(167, 139, 250, 0.1); color: var(--purple); border: 1px solid rgba(167, 139, 250, 0.25); }
     .bo-chip-remote  { background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
     .bo-body { padding: 14px 16px; background: var(--bg2); }
