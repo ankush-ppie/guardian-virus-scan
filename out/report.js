@@ -1140,7 +1140,7 @@ ${buildSafeRulesPanel(result.safeRules)}
 </div>
 
 <div class="footer">
-  <span class="footer-badge">Guardian v${result.version || '1.1.0'}</span>
+  <span class="footer-badge">Guardian v${result.version || '1.2.0'}</span>
   <span class="footer-dot">·</span>
   Scanned ${result.branches.length} branch${result.branches.length !== 1 ? 'es' : ''}
   <span class="footer-dot">·</span>

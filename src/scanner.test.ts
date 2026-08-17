@@ -126,7 +126,7 @@ function testBranchOverviewReport(): void {
       },
     ],
     scanDurationMs: 50,
-    version: '1.1.0',
+    version: '1.2.0',
   };
 
   const html = buildReportHtml(mockResult);
@@ -239,7 +239,7 @@ async function testSafeRulesPreferences() {
       },
     ],
     scanDurationMs: 10,
-    version: '1.1.0',
+    version: '1.2.0',
   };
 
   const processed = applySafePreferences(rawResult, rules);

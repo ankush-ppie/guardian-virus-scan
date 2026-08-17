@@ -144,7 +144,7 @@ function testBranchOverviewReport() {
             },
         ],
         scanDurationMs: 50,
-        version: '1.1.0',
+        version: '1.2.0',
     };
     const html = (0, report_1.buildReportHtml)(mockResult);
     // 1: Default it should be collapsed (no 'open' attribute on details.branch-overview)
@@ -242,7 +242,7 @@ async function testSafeRulesPreferences() {
             },
         ],
         scanDurationMs: 10,
-        version: '1.1.0',
+        version: '1.2.0',
     };
     const processed = applySafePreferences(rawResult, rules);
     const threats = processed.branches[0].threats;

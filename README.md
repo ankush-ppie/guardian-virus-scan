@@ -72,7 +72,7 @@ Guardian guards against typical registry, task, or environment bypass scripts.
    ```
    Extensions: Install from VSIX...
    ```
-3. Locate the generated `guardian-virus-scan-1.1.0.vsix` file and reload VS Code.
+3. Locate the generated `guardian-virus-scan-1.2.0.vsix` file and reload VS Code.
 
 ### Building from Source (Local Package)
 ```bash
@@ -108,6 +108,7 @@ Remote-tracking refs reflect the last local fetch; Guardian does not silently fe
 
 - [x] **v1.0.0** (Initial Release) — Real-time multi-branch scans, static threat detection ruleset, interactive webview dashboard.
 - [x] **v1.1.0** — Working-tree and remote-ref coverage, confirmed incident signatures, shell-safe Git reads, and regression tests.
+- [x] **v1.2.0** — False-positive whitelisting (Mark as Safe/Unsafe for Project & Global), footer status bar integration, branch overview quick copy, dual-dimension branch filtering, and sticky UI layering enhancements.
 - [ ] **v2.0.0** (Planned) — Reviewed quarantine workflow and user-defined signature rules.
 - [ ] **v3.0.0** (Planned) — Remote branch check integrations and GitHub Actions CI pipelines runner.
 

@@ -2,6 +2,28 @@
 
 All notable changes to the **Guardian Virus Scan** extension will be documented in this file.
 
+## [1.2.0] - 2026-08-17
+
+### Added
+- **False-Positive Whitelisting ("Mark as Safe" / "Mark as Unsafe")**:
+  - Whitelist benign rules/files directly from the scan report for **This Project** (workspace state) or **All Projects** (global state).
+  - Dedicated "Whitelisted Rules" management panel with quick "Mark as Unsafe" removal.
+  - Automatically reclassifies branches where all threats are whitelisted into Clean branches with clear `✓ Clean · X Safe` badges.
+- **Status Bar 1-Click Access**:
+  - Unobtrusive `🛡️ Guardian` status bar item in the footer with live threat status and 1-click report opening.
+- **Branch Overview & Quick Copy**:
+  - Collapsible Branch Overview section with combined badge indicators (e.g. `4 Local · 2 Remote`).
+  - One-click clipboard copy button for local and remote branch names.
+- **Dual-Dimension Branch Filtering**:
+  - Independent Scope (`All`, `Local`, `Remote`) and Status (`All`, `Infected`, `Clean`, `Safe`) filter controls with real-time branch count indicators.
+  - Dedicated **`🛡️ Safe`** view to inspect and expand all whitelisted findings across branches.
+- **UI Enhancements & Reload Action**:
+  - Added "Reload Window" quick button with shortcut tooltip in the report header.
+
+### Fixed
+- Fixed z-index layering hierarchy ensuring sticky headers stay on top of scrolling action buttons.
+- Added auto-closing behavior for action dropdowns on page scroll or outside click.
+
 ## [1.1.0] - 2026-08-16
 
 ### Added
