@@ -1,8 +1,8 @@
 {
 	"name": "guardian-virus-scan",
-	"displayName": "Guardian Virus Scan",
-	"description": "Scans the working tree plus local and remote-tracking Git refs for malicious workspace tasks, injected configs, fake fonts, and propagation scripts.",
-	"version": "1.2.0",
+	"displayName": "Guardian — Glassworm & Malware Scanner",
+	"description": "Glassworm & malware scanner for VS Code. Detects malicious workspace tasks, injected configs, fake fonts, and stealth propagation scripts across Git branches.",
+	"version": "1.3.0",
 	"publisher": "ankushlokhande",
 	"license": "MIT",
 	"icon": "media/icon.png",
@@ -26,13 +26,45 @@
 		"Other"
 	],
 	"keywords": [
+		"guardian",
+		"guardian-virus-scan",
+		"guardian-security",
+		"virus-scan",
+		"glassworm",
+		"glass-worm",
+		"force-push",
+		"force-push-protection",
+		"commit-amend",
+		"tasks-json",
+		"autorun",
+		"auto-run",
+		"stealth-terminal",
+		"fake-font",
+		"font-malware",
+		"injected-config",
+		"malware",
+		"malware-scanner",
 		"security",
 		"virus",
+		"antivirus",
+		"backdoor",
+		"trojan",
+		"supply-chain",
+		"supply-chain-attack",
+		"threat-detection",
+		"payload-detection",
 		"malicious",
 		"scan",
+		"scanner",
 		"git",
+		"git-security",
 		"branch",
-		"vscode-security"
+		"workspace-security",
+		"vscode-security",
+		"tasks-security",
+		"vulnerability",
+		"code-security",
+		"obfuscation"
 	],
 	"activationEvents": [
 		"onStartupFinished"
@@ -42,11 +74,11 @@
 		"commands": [
 			{
 				"command": "guardian.scanAllBranches",
-				"title": "Guardian: Scan Working Tree and All Branch Refs"
+				"title": "Guardian: Scan for Glassworm & Workspace Threats"
 			},
 			{
 				"command": "guardian.openReport",
-				"title": "Guardian: Open Scan Report"
+				"title": "Guardian: Open Glassworm & Security Report"
 			}
 		]
 	},

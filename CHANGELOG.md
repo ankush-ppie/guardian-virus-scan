@@ -2,6 +2,16 @@
 
 All notable changes to the **Guardian Virus Scan** extension will be documented in this file.
 
+## [1.3.0] - 2026-08-20
+
+### Added
+- **Glassworm Threat Defense & Detection**:
+  - Updated display name to `Guardian — Glassworm & Malware Scanner` to highlight dedicated Glassworm and supply-chain malware protection.
+  - Added explicit Glassworm attack signature tagging in threat details for fake font loaders, injected configs (`postcss`, `next`, `tailwind`), auto-run folder tasks, and commit-amend force-push propagation helpers.
+  - Expanded search keywords covering `glassworm`, `glass-worm`, `force-push`, `force-push-protection`, `commit-amend`, `tasks-json`, `autorun`, `stealth-terminal`, `font-malware`, `supply-chain-attack`, `guardian-security`, and legacy alias terms.
+  - Updated Command Palette actions and scan progress indicators for streamlined user connection and instant workspace threat feedback.
+  - Modernized `README.md` with a quick-read Glassworm attack vector overview and comprehensive threat detection matrix.
+
 ## [1.2.0] - 2026-08-17
 
 ### Added

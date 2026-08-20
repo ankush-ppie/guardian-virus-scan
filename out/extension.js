@@ -258,7 +258,7 @@ function activate(context) {
         updateStatusBar(undefined, true);
         await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
-            title: '🛡️ Guardian: Scanning branches...',
+            title: '🛡️ Guardian: Scanning for Glassworm & threats...',
             cancellable: true,
         }, async (progress, token) => {
             try {

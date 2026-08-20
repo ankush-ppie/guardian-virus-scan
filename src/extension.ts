@@ -308,7 +308,7 @@ export function activate(context: vscode.ExtensionContext) {
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: '🛡️ Guardian: Scanning branches...',
+        title: '🛡️ Guardian: Scanning for Glassworm & threats...',
         cancellable: true,
       },
       async (progress, token) => {

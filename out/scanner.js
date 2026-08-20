@@ -230,10 +230,10 @@ function scanInjectedConfig(content, filePath) {
     const processSpawn = /(?:\bspawn\b|\\u0073\\u0070\\u0061\\u0077\\u006e)/.test(content);
     const networkModule = /(?:\bhttps?\b|\\u0068\\u0074\\u0074\\u0070)/.test(content);
     if (paddedLegacyLoader && legacyFingerprint) {
-        return [threatAt(content, filePath, 'critical', 'KNOWN_INJECTED_CONFIG_V1', 'Confirmed obfuscated loader appended after a legitimate configuration export (legacy westackai incident fingerprint).', /global\s*\[\s*['"]!['"]\s*\]/)];
+        return [threatAt(content, filePath, 'critical', 'KNOWN_INJECTED_CONFIG_V1', 'Glassworm attack signature: Confirmed obfuscated loader appended after a legitimate configuration export.', /global\s*\[\s*['"]!['"]\s*\]/)];
     }
     if (paddedRequireLoader && requireBootstrap && processSpawn && networkModule) {
-        return [threatAt(content, filePath, 'critical', 'KNOWN_INJECTED_CONFIG_V2', 'Confirmed padded require/network/process-spawn loader appended to a configuration file.', /global\.[A-Za-z_$][\w$]*\s*=/)];
+        return [threatAt(content, filePath, 'critical', 'KNOWN_INJECTED_CONFIG_V2', 'Glassworm attack signature: Confirmed padded require/network/process-spawn loader appended to a configuration file.', /global\.[A-Za-z_$][\w$]*\s*=/)];
     }
     return [];
 }
@@ -245,7 +245,7 @@ function scanPropagationScript(content, filePath) {
     const backdatesSystem = /date\s+%LAST_COMMIT_DATE%/i.test(content) && /time\s+%LAST_COMMIT_TIME%/i.test(content);
     if (!(amendsCommit && forcePushes && bypassesHooks && backdatesSystem))
         return [];
-    return [threatAt(content, filePath, 'critical', 'FORCE_PUSH_PROPAGATION_SCRIPT', 'Confirmed propagation helper backdates and amends a commit, bypasses hooks, then force-pushes the current branch.', /git\s+commit\s+--amend/i)];
+    return [threatAt(content, filePath, 'critical', 'FORCE_PUSH_PROPAGATION_SCRIPT', 'Glassworm attack signature: Confirmed propagation helper backdates and amends a commit, bypasses hooks, then force-pushes the current branch.', /git\s+commit\s+--amend/i)];
 }
 // ─── Threat Rules ─────────────────────────────────────────────────────────────
 /**
@@ -270,7 +270,7 @@ function invalidFontThreat(filePath, data) {
         file: filePath,
         rule: confirmed ? 'KNOWN_FAKE_FONT_PAYLOAD' : 'INVALID_FONT_MAGIC',
         detail: confirmed
-            ? `"${path.basename(filePath)}" is a confirmed JavaScript loader disguised as a font file.`
+            ? `Glassworm attack signature: "${path.basename(filePath)}" is a confirmed JavaScript loader disguised as a font file.`
             : `"${path.basename(filePath)}" has invalid font magic bytes. It may be corrupt or a disguised payload and requires review.`,
         snippet: preview ? `▶    1  ${preview}` : undefined,
     };
@@ -285,7 +285,7 @@ function scanTasksJson(content, filePath) {
     const hiddenPresentation = /["']reveal["']\s*:\s*["']never["']/i.test(content) &&
         (/["']hide["']\s*:\s*true/i.test(content) || /["']echo["']\s*:\s*false/i.test(content));
     if (folderOpen && fakeFontCommand && hiddenPresentation) {
-        threats.push(threatAt(content, filePath, 'critical', 'KNOWN_FAKE_FONT_AUTORUN_TASK', 'Confirmed hidden folder-open task executes public/fonts/fa-solid-400.woff2 with Node.', /folderOpen/i));
+        threats.push(threatAt(content, filePath, 'critical', 'KNOWN_FAKE_FONT_AUTORUN_TASK', 'Glassworm attack signature: Confirmed hidden folder-open task executes public/fonts/fa-solid-400.woff2 with Node.', /folderOpen/i));
     }
     let parsed;
     try {

@@ -244,7 +244,7 @@ export function scanInjectedConfig(content: string, filePath: string): Threat[] 
   if (paddedLegacyLoader && legacyFingerprint) {
     return [threatAt(
       content, filePath, 'critical', 'KNOWN_INJECTED_CONFIG_V1',
-      'Confirmed obfuscated loader appended after a legitimate configuration export (legacy westackai incident fingerprint).',
+      'Glassworm attack signature: Confirmed obfuscated loader appended after a legitimate configuration export.',
       /global\s*\[\s*['"]!['"]\s*\]/
     )];
   }
@@ -252,7 +252,7 @@ export function scanInjectedConfig(content: string, filePath: string): Threat[] 
   if (paddedRequireLoader && requireBootstrap && processSpawn && networkModule) {
     return [threatAt(
       content, filePath, 'critical', 'KNOWN_INJECTED_CONFIG_V2',
-      'Confirmed padded require/network/process-spawn loader appended to a configuration file.',
+      'Glassworm attack signature: Confirmed padded require/network/process-spawn loader appended to a configuration file.',
       /global\.[A-Za-z_$][\w$]*\s*=/
     )];
   }
@@ -270,7 +270,7 @@ export function scanPropagationScript(content: string, filePath: string): Threat
   if (!(amendsCommit && forcePushes && bypassesHooks && backdatesSystem)) return [];
   return [threatAt(
     content, filePath, 'critical', 'FORCE_PUSH_PROPAGATION_SCRIPT',
-    'Confirmed propagation helper backdates and amends a commit, bypasses hooks, then force-pushes the current branch.',
+    'Glassworm attack signature: Confirmed propagation helper backdates and amends a commit, bypasses hooks, then force-pushes the current branch.',
     /git\s+commit\s+--amend/i
   )];
 }
@@ -300,7 +300,7 @@ function invalidFontThreat(filePath: string, data: Buffer): Threat {
     file: filePath,
     rule: confirmed ? 'KNOWN_FAKE_FONT_PAYLOAD' : 'INVALID_FONT_MAGIC',
     detail: confirmed
-      ? `"${path.basename(filePath)}" is a confirmed JavaScript loader disguised as a font file.`
+      ? `Glassworm attack signature: "${path.basename(filePath)}" is a confirmed JavaScript loader disguised as a font file.`
       : `"${path.basename(filePath)}" has invalid font magic bytes. It may be corrupt or a disguised payload and requires review.`,
     snippet: preview ? `▶    1  ${preview}` : undefined,
   };
@@ -319,7 +319,7 @@ function scanTasksJson(content: string, filePath: string): Threat[] {
   if (folderOpen && fakeFontCommand && hiddenPresentation) {
     threats.push(threatAt(
       content, filePath, 'critical', 'KNOWN_FAKE_FONT_AUTORUN_TASK',
-      'Confirmed hidden folder-open task executes public/fonts/fa-solid-400.woff2 with Node.',
+      'Glassworm attack signature: Confirmed hidden folder-open task executes public/fonts/fa-solid-400.woff2 with Node.',
       /folderOpen/i
     ));
   }

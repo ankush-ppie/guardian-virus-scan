@@ -2,115 +2,123 @@
   <img src="media/icon.png" width="160" height="160" alt="Guardian Logo" />
 </p>
 
-<h1 align="center">Guardian — Virus Scan</h1>
+<h1 align="center">Guardian — Glassworm & Malware Scanner</h1>
 
 <p align="center">
-  <strong>Proactive Security & Branch Scanning for VS Code Workspace Safekeeping</strong>
+  <strong>Proactive Security, Glassworm Defense & Multi-Branch Git Threat Detection for VS Code Workspaces</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/visual-studio-marketplace/v/ankushlokhande.guardian-virus-scan?style=flat-square&color=38bdf8" alt="Version" />
+  <a href="https://marketplace.visualstudio.com/items?itemName=ankushlokhande.guardian-virus-scan"><img src="https://img.shields.io/visual-studio-marketplace/v/ankushlokhande.guardian-virus-scan?style=flat-square&color=38bdf8" alt="Marketplace Version" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=ankushlokhande.guardian-virus-scan"><img src="https://img.shields.io/visual-studio-marketplace/d/ankushlokhande.guardian-virus-scan?style=flat-square&color=f472b6" alt="Downloads" /></a>
   <img src="https://img.shields.io/github/license/ankush-ppie/guardian-virus-scan?style=flat-square&color=34d399" alt="License" />
-  <img src="https://img.shields.io/visual-studio-marketplace/d/ankushlokhande.guardian-virus-scan?style=flat-square&color=f472b6" alt="Downloads" />
+  <img src="https://img.shields.io/badge/Glassworm-Protected-emerald?style=flat-square" alt="Glassworm Protected" />
 </p>
 
 ---
 
-## 🛡️ Overview
+## ⚡ What is Glassworm & Why Do You Need Guardian?
 
-**Guardian** scans the current working tree plus every local and locally available remote-tracking Git ref for malicious `.vscode/` configurations, injected build configs, fake font files, and propagation scripts.
+The **Glassworm** malware campaign and modern supply-chain attacks specifically target developer machines by embedding stealth backdoors directly into workspace configurations and repository files.
 
-It never checks out a branch, modifies repository content, executes repository code, or contacts a remote. Keep VS Code Workspace Trust enabled: no extension can guarantee it activates before every built-in task or previously trusted workspace action.
+When you open an untrusted project or pull a branch, attackers exploit automated development workflows before you even run a single test:
 
----
+* 🪱 **Hidden Autorun Tasks**: Injected `.vscode/tasks.json` triggers that execute invisibly on folder open (`runOn: folderOpen`).
+* 🪱 **Fake Font Payloads**: Obfuscated JavaScript loaders disguised under font extensions like `fa-solid-400.woff2`, `.ttf`, or `.otf`.
+* 🪱 **Injected Framework Configs**: Padded malicious code appended to `postcss.config.mjs`, `next.config.js`, or `tailwind.config.js`.
+* 🪱 **Silent Git Propagation Scripts**: Batch helpers (`config.bat`) that backdate commits, amend histories, bypass hooks (`--no-verify`), and force-push malware to your remotes.
 
-## 🚀 Key Features
-
-* **Working Tree + Multi-Ref Scanner**: Inspects ignored/untracked high-risk files and all local and remote-tracking refs using safe Git object reads.
-* **Zero Workspace Disturbance**: The current branch, unstaged files, and working directory state are completely untouched during scanning.
-* **Incident-Tested Signatures**: Detects both confirmed westackai injected-config families, the hidden fake-font task chain, and the commit-amend/force-push batch helper.
-* **Shell-Safe Git Reads**: Git is invoked with argument arrays, so crafted branch or file names cannot become shell commands.
-* **Auto Project Detection**: Adapts scanning profiles automatically based on target workspace (Flutter, Node.js, Python, or Generic code repositories).
-* **Interactive Scan Dashboard**: A clean webview panel lists active threats, details the malicious files, and explains the rule violations.
+**Guardian** neutralizes this threat vector by scanning your active working tree and **every single local and remote-tracking Git branch** in the background — identifying threats before they can execute.
 
 ---
 
-## 🛑 Threat Detection Rules
+## 🚀 Quick Start (Zero Configuration Required)
 
-Guardian guards against typical registry, task, or environment bypass scripts.
-
-| Threat Rule | Severity | Target File / Area | Description |
-| :--- | :--- | :--- | :--- |
-| `AUTO_RUN_ON_OPEN` | 🔴 Critical | `.vscode/tasks.json` | Detects automation configurations configured to run immediately on folder opening. |
-| `STEALTH_TERMINAL` | 🔴 Critical | `.vscode/tasks.json` | Flags background or hidden console terminals designed to run tasks invisibly. |
-| `NODE_EXECUTES_BINARY` | 🔴 Critical | `.vscode/tasks.json` | Identifies tasks attempting to execute binary files disguised as font or script files via Node. |
-| `KNOWN_FAKE_FONT_AUTORUN_TASK` | 🔴 Critical | `.vscode/tasks.json` | Matches the confirmed hidden folder-open task that executes `fa-solid-400.woff2` with Node, including JSONC files. |
-| `KNOWN_INJECTED_CONFIG_V1` | 🔴 Critical | PostCSS/Next/Tailwind config | Matches the padded `global['!']` + `rmcej%otb%` loader family. |
-| `KNOWN_INJECTED_CONFIG_V2` | 🔴 Critical | PostCSS/Next/Tailwind config | Matches the padded require/network/process-spawn loader family. |
-| `KNOWN_FAKE_FONT_PAYLOAD` | 🔴 Critical | `.woff2`, `.ttf`, `.otf`, `.woff` | Confirms a known JavaScript loader inside a file with a font extension. |
-| `INVALID_FONT_MAGIC` | 🟠 High | Font assets | Flags a corrupt or disguised font for review without claiming confirmed malware. |
-| `FORCE_PUSH_PROPAGATION_SCRIPT` | 🔴 Critical | `config.bat` | Detects backdating, commit amendment, hook bypass, and force-push propagation behavior. |
-| `AUTO_TASKS_ENABLED` | 🔴 Critical | `.vscode/settings.json` | Flags configurations that automatically allow tasks without user prompt confirmations. |
-| `OBFUSCATED_COMMAND` | 🟠 High | `.vscode/tasks.json` | Detects base64 or obfuscated terminal command payloads. |
-| `NETWORK_DOWNLOAD_IN_TASK` | 🟠 High | `.vscode/tasks.json` | Identifies curl, wget, or fetch requests downloading unverified scripts. |
-| `GITIGNORE_HIDES_ITSELF` | 🟠 High | `.gitignore` | Warns if the `.gitignore` tries to hide itself or push scripts from local tracking. |
-| `PUBSPEC_DEP_OVERRIDE` | 🟠 High | `pubspec.yaml` (Flutter) | Flags dependency override manipulation pointing to malicious sources. |
-| `PUBSPEC_UNKNOWN_GIT_DEP` | 🟠 High | `pubspec.yaml` (Flutter) | Warns against untrusted Git repository dependency configurations. |
-| `GITIGNORE_HIDES_VSCODE` | 🟡 Medium | `.gitignore` | Detects hiding `.vscode/` configurations from normal commit files. |
-| `GITIGNORE_HIDES_PUSH_SCRIPT` | 🟠 High | `.gitignore` | Detects git-ignore hiding files ending with `.sh` or `.bat`. |
-| `SENSITIVE_ENV_IN_LAUNCH` | 🟡 Medium | `.vscode/launch.json` | Flags environment variable inclusions that leak sensitive details. |
-| `BUILD_YAML_CUSTOM_BUILDER` | 🟡 Medium | `build.yaml` (Flutter) | Flags custom builder steps executing unverified compilation tasks. |
-| `TERMINAL_ENV_ISOLATION` | 🟡 Medium | `.vscode/settings.json` | Flags modifications that alter the terminal environment variables. |
+1. **Auto-Scan on Open**: Guardian automatically runs a silent background scan whenever you open a project in VS Code.
+2. **Status Bar Access**: Look at the bottom status bar for the `🛡️ Guardian` shield indicator. Click it anytime to open the interactive security report.
+3. **Manual Command**: Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and run:
+   ```
+   Guardian: Scan for Glassworm & Workspace Threats
+   ```
+4. **Interactive Dashboard**: Inspect threat details, view quarantined snippets in read-only virtual tabs, or whitelist internal build rules with **Mark as Safe**.
 
 ---
 
-## 🛠️ Installation & Building
+## 🛡️ Key Features
 
-### Standard Installation (via VSIX)
-1. Download the latest release `.vsix` file.
-2. Inside VS Code, open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and choose:
+* 🔍 **Multi-Branch & Ref Scanner**: Inspects all local branches and remote-tracking refs directly via safe Git object database reads.
+* 🌳 **Working Tree & Untracked Coverage**: Detects ignored, untracked, and newly modified high-risk files in your active workspace.
+* 🔒 **Zero Workspace Disturbance**: Never checks out branches, never alters your Git index, never executes repository files, and never contacts remote servers.
+* 🎯 **Incident-Tested Glassworm Signatures**: Specific pattern recognition for confirmed Glassworm loader variants, fake font payloads, and amend/force-push propagation helpers.
+* 🛡️ **False-Positive Whitelisting**: Mark benign custom rules as Safe for **This Project** or **All Projects** globally with instant UI reclassification.
+* ⚡ **Shell-Safe Execution**: Git commands use strict argument arrays, preventing crafted branch or commit names from becoming shell injections.
+* 📊 **Adaptive Project Detection**: Automatically optimizes threat rules for Flutter, Node.js, Next.js, Python, and Generic code repositories.
+
+---
+
+## 🛑 Threat Detection Matrix
+
+Guardian defends against Glassworm campaign signatures, supply-chain vulnerabilities, and malicious workspace automation:
+
+| Threat Rule | Severity | Category | Target File / Area | Threat Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `KNOWN_FAKE_FONT_AUTORUN_TASK` | 🔴 Critical | **Glassworm** | `.vscode/tasks.json` | Confirmed hidden folder-open task executing `fa-solid-400.woff2` payload via Node. |
+| `KNOWN_INJECTED_CONFIG_V1` | 🔴 Critical | **Glassworm** | PostCSS / Next / Tailwind config | Confirmed obfuscated loader appended after export (`global['!']` + `rmcej%otb%`). |
+| `KNOWN_INJECTED_CONFIG_V2` | 🔴 Critical | **Glassworm** | PostCSS / Next / Tailwind config | Confirmed padded require/network/process-spawn loader appended to configuration. |
+| `KNOWN_FAKE_FONT_PAYLOAD` | 🔴 Critical | **Glassworm** | `.woff2`, `.ttf`, `.otf`, `.woff` | Confirmed JavaScript loader hidden inside a file with a font extension. |
+| `FORCE_PUSH_PROPAGATION_SCRIPT` | 🔴 Critical | **Glassworm** | `config.bat` / scripts | Backdates system time, amends commit, bypasses hooks, and force-pushes origin. |
+| `AUTO_RUN_ON_OPEN` | 🔴 Critical | Workspace Security | `.vscode/tasks.json` | Flag automation tasks configured to run automatically upon folder open. |
+| `STEALTH_TERMINAL` | 🔴 Critical | Workspace Security | `.vscode/tasks.json` | Detects hidden, background, or headless terminals designed for stealth execution. |
+| `NODE_EXECUTES_BINARY` | 🔴 Critical | Workspace Security | `.vscode/tasks.json` | Identifies tasks attempting to execute binary files disguised as font or script files via Node. |
+| `AUTO_TASKS_ENABLED` | 🔴 Critical | VS Code Settings | `.vscode/settings.json` | Flags configurations that automatically permit task execution without confirmation. |
+| `OBFUSCATED_COMMAND` | 🟠 High | Malware Detection | `.vscode/tasks.json` | Detects base64 or obfuscated command payloads in tasks. |
+| `NETWORK_DOWNLOAD_IN_TASK` | 🟠 High | Supply Chain | `.vscode/tasks.json` | Identifies curl, wget, or fetch commands downloading unverified remote scripts. |
+| `INVALID_FONT_MAGIC` | 🟠 High | Asset Integrity | Font assets (`.woff2`, `.ttf`) | Flags corrupt or disguised font files with invalid magic header bytes. |
+| `GITIGNORE_HIDES_ITSELF` | 🟠 High | Stealth Bypass | `.gitignore` | Warns if `.gitignore` attempts to hide itself or push scripts from tracking. |
+| `GITIGNORE_HIDES_PUSH_SCRIPT` | 🟠 High | Stealth Bypass | `.gitignore` | Detects gitignore rules hiding `.sh` or `.bat` executable scripts. |
+| `PUBSPEC_DEP_OVERRIDE` | 🟠 High | Flutter / Dart | `pubspec.yaml` | Flags dependency override manipulation pointing to untrusted sources. |
+| `PUBSPEC_UNKNOWN_GIT_DEP` | 🟠 High | Flutter / Dart | `pubspec.yaml` | Warns against untrusted Git repository dependency configurations. |
+| `GITIGNORE_HIDES_VSCODE` | 🟡 Medium | Stealth Bypass | `.gitignore` | Detects hiding `.vscode/` configurations from normal commit review. |
+| `SENSITIVE_ENV_IN_LAUNCH` | 🟡 Medium | Credential Leak | `.vscode/launch.json` | Flags hardcoded secrets or environment variables in launch configs. |
+| `BUILD_YAML_CUSTOM_BUILDER` | 🟡 Medium | Flutter / Dart | `build.yaml` | Flags custom builder steps executing unverified compilation tasks. |
+| `TERMINAL_ENV_ISOLATION` | 🟡 Medium | VS Code Settings | `.vscode/settings.json` | Flags modifications that alter the terminal environment variables. |
+
+---
+
+## 🛠️ Installation
+
+### From VS Code Marketplace
+1. Open VS Code and press `Ctrl+Shift+X` / `Cmd+Shift+X` to open Extensions.
+2. Search for **`Guardian`** or **`Glassworm`**.
+3. Click **Install**.
+
+### From VSIX
+1. Download the latest release `.vsix` from [GitHub Releases](https://github.com/ankush-ppie/guardian-virus-scan/releases).
+2. Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and choose:
    ```
    Extensions: Install from VSIX...
    ```
-3. Locate the generated `guardian-virus-scan-1.2.0.vsix` file and reload VS Code.
-
-### Building from Source (Local Package)
-```bash
-# Clone the repository
-git clone https://github.com/ankush-ppie/guardian-virus-scan.git
-cd guardian-virus-scan
-
-# Install dependencies and build compiler output
-npm install
-npm run compile
-
-# Package the extension locally
-npm install -g @vscode/vsce
-vsce package
-```
+3. Select the `.vsix` file and reload VS Code.
 
 ---
 
-## 💡 How it works (Under the hood)
+## 💡 How It Works Under the Hood
 
-Guardian never executes a checkout or repository file. It reads branch content directly from the Git object database and separately reads only high-risk working-tree candidates:
+Guardian reads repository files directly from the Git object database without switching branches:
 
 ```bash
 git show <branch>:.vscode/tasks.json
 git ls-tree -r --name-only <branch>
 ```
 
-Remote-tracking refs reflect the last local fetch; Guardian does not silently fetch from the network. Fetch normally, then rescan when you need the latest remote state.
+* **No Branch Switching**: Your working tree, stashes, and current branch state remain 100% untouched.
+* **Safe Read-Only Viewer**: When you click to inspect an infected file, Guardian opens a virtual, read-only document (`guardian-branch:/...`) so the malicious task cannot accidentally trigger.
 
 ---
 
-## 📋 Roadmap
+## 📋 Changelog & Version History
 
-- [x] **v1.0.0** (Initial Release) — Real-time multi-branch scans, static threat detection ruleset, interactive webview dashboard.
-- [x] **v1.1.0** — Working-tree and remote-ref coverage, confirmed incident signatures, shell-safe Git reads, and regression tests.
-- [x] **v1.2.0** — False-positive whitelisting (Mark as Safe/Unsafe for Project & Global), footer status bar integration, branch overview quick copy, dual-dimension branch filtering, and sticky UI layering enhancements.
-- [ ] **v2.0.0** (Planned) — Reviewed quarantine workflow and user-defined signature rules.
-- [ ] **v3.0.0** (Planned) — Remote branch check integrations and GitHub Actions CI pipelines runner.
+See [CHANGELOG.md](CHANGELOG.md) for full release notes and feature history.
 
 ---
 
