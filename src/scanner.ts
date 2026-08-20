@@ -2,6 +2,7 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SafeRuleEntry, matchSafeRule } from './preferences';
+import { ExtensionAuditReport } from './extensionAuditor';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ export interface WorkspaceScanResult {
   scanDurationMs: number;
   version?: string;
   safeRules?: SafeRuleEntry[];
+  extensionAudit?: ExtensionAuditReport;
 }
 
 export function getActiveThreats(threats: Threat[]): Threat[] {

@@ -42,6 +42,7 @@ const path = __importStar(require("path"));
 const scanner_1 = require("./scanner");
 const report_1 = require("./report");
 const preferences_1 = require("./preferences");
+const extensionAuditor_1 = require("./extensionAuditor");
 let reportPanel;
 let latestResult;
 const virtualDocuments = new Map();
@@ -147,22 +148,31 @@ async function openThreatFile(context, workspaceRoot, file, line, branch) {
     }
 }
 // ─── Show / refresh the report panel ─────────────────────────────────────────
-function showReport(result, context) {
+function showReport(result, context, initialTab = 'glassworm') {
     const activeInfectedCount = result.branches.filter(b => (0, scanner_1.getActiveThreats)(b.threats).length > 0).length;
-    const title = activeInfectedCount > 0
-        ? `🛡️ Guardian — ${activeInfectedCount} branch${activeInfectedCount !== 1 ? 'es' : ''} infected`
-        : '🛡️ Guardian — All branches clean';
+    const extMaliciousCount = result.extensionAudit?.maliciousCount ?? 0;
+    let title = '🛡️ Guardian — All branches clean';
+    if (activeInfectedCount > 0 && extMaliciousCount > 0) {
+        title = `🛡️ Guardian — ${activeInfectedCount} infected branch(es), ${extMaliciousCount} malicious ext(s)`;
+    }
+    else if (activeInfectedCount > 0) {
+        title = `🛡️ Guardian — ${activeInfectedCount} branch${activeInfectedCount !== 1 ? 'es' : ''} infected`;
+    }
+    else if (extMaliciousCount > 0) {
+        title = `🛡️ Guardian — ${extMaliciousCount} malicious extension${extMaliciousCount !== 1 ? 's' : ''}`;
+    }
     if (reportPanel) {
         latestResult = result;
         reportPanel.title = title;
-        reportPanel.webview.html = (0, report_1.buildReportHtml)(result);
+        reportPanel.webview.html = (0, report_1.buildReportHtml)(result, initialTab);
         reportPanel.reveal(vscode.ViewColumn.One);
+        reportPanel.webview.postMessage({ action: 'switchTab', tab: initialTab });
         return;
     }
     // Create panel fresh
     reportPanel = vscode.window.createWebviewPanel('guardianReport', title, vscode.ViewColumn.One, { enableScripts: true, retainContextWhenHidden: true });
     reportPanel.onDidDispose(() => { reportPanel = undefined; });
-    reportPanel.webview.html = (0, report_1.buildReportHtml)(result);
+    reportPanel.webview.html = (0, report_1.buildReportHtml)(result, initialTab);
     // Register listener ONCE — reads latestResult so it's always fresh
     reportPanel.webview.onDidReceiveMessage(async (msg) => {
         if (msg.action === 'rescan') {
@@ -209,6 +219,67 @@ function showReport(result, context) {
             if (latestResult) {
                 await openThreatFile(context, latestResult.workspacePath, msg.file, msg.line, msg.branch);
             }
+            return;
+        }
+        if (msg.action === 'startExtensionAudit') {
+            const report = await (0, extensionAuditor_1.auditInstalledExtensions)((progress) => {
+                reportPanel?.webview.postMessage({ action: 'extensionAuditProgress', progress });
+            });
+            if (latestResult) {
+                latestResult.extensionAudit = report;
+            }
+            reportPanel?.webview.postMessage({ action: 'extensionAuditComplete', report });
+            if (report.maliciousCount > 0) {
+                vscode.window.showErrorMessage(`🚨 Guardian: ${report.maliciousCount} malicious extension${report.maliciousCount !== 1 ? 's' : ''} detected! Review and remove them in the Guardian report.`, 'View Report').then(choice => {
+                    if (choice === 'View Report' && latestResult) {
+                        showReport(latestResult, context, 'extension-audit');
+                    }
+                });
+            }
+            else {
+                vscode.window.showInformationMessage(`🛡️ Guardian: All ${report.totalAudited} installed extensions are clean (${report.userCount} user-installed, ${report.builtinCount} built-in).`);
+            }
+            return;
+        }
+        if (msg.action === 'uninstallExtension') {
+            const { id, path } = msg;
+            const result = await (0, extensionAuditor_1.uninstallExtension)(id, path);
+            reportPanel?.webview.postMessage({
+                action: 'extensionUninstalled',
+                id,
+                success: result.success,
+                message: result.message,
+            });
+            if (result.success) {
+                vscode.window.showInformationMessage(`🛡️ Guardian: Extension "${id}" uninstalled. Reload window to complete removal.`, 'Reload Window').then(choice => {
+                    if (choice === 'Reload Window') {
+                        vscode.commands.executeCommand('workbench.action.reloadWindow');
+                    }
+                });
+            }
+            else {
+                vscode.window.showErrorMessage(result.message);
+            }
+            return;
+        }
+        if (msg.action === 'uninstallAllMalicious') {
+            const { extensions } = msg;
+            const results = await (0, extensionAuditor_1.uninstallAllMaliciousExtensions)(extensions || []);
+            reportPanel?.webview.postMessage({
+                action: 'allMaliciousUninstalled',
+                results,
+            });
+            if (results.successful.length > 0) {
+                vscode.window.showInformationMessage(`🛡️ Guardian: Removed ${results.successful.length} malicious extension(s). Reload window to apply changes.`, 'Reload Window').then(choice => {
+                    if (choice === 'Reload Window') {
+                        vscode.commands.executeCommand('workbench.action.reloadWindow');
+                    }
+                });
+            }
+            if (results.failed.length > 0) {
+                vscode.window.showErrorMessage(`Guardian: Failed to automatically remove: ${results.failed.join(', ')}. Try running 'code --uninstall-extension <id>' in terminal.`);
+            }
+            return;
         }
     }, undefined, context.subscriptions);
 }
@@ -325,6 +396,48 @@ function activate(context) {
         }
         for (const folder of folders) {
             await triggerScan(folder.uri.fsPath);
+        }
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('guardian.auditExtensions', async () => {
+        if (!latestResult) {
+            const folders = vscode.workspace.workspaceFolders;
+            if (folders?.length) {
+                await triggerScan(folders[0].uri.fsPath);
+                if (latestResult) {
+                    showReport(latestResult, context, 'extension-audit');
+                }
+            }
+            else {
+                const emptyResult = {
+                    workspacePath: 'Extension Supply-Chain Audit',
+                    projectType: 'generic',
+                    branches: [],
+                    scanDurationMs: 0,
+                };
+                latestResult = emptyResult;
+                showReport(emptyResult, context, 'extension-audit');
+            }
+        }
+        else {
+            showReport(latestResult, context, 'extension-audit');
+        }
+        // Automatically trigger the audit progress
+        const report = await (0, extensionAuditor_1.auditInstalledExtensions)((progress) => {
+            reportPanel?.webview.postMessage({ action: 'extensionAuditProgress', progress });
+        });
+        if (latestResult) {
+            latestResult.extensionAudit = report;
+        }
+        reportPanel?.webview.postMessage({ action: 'extensionAuditComplete', report });
+        if (report.maliciousCount > 0) {
+            vscode.window.showErrorMessage(`🚨 Guardian: ${report.maliciousCount} malicious extension${report.maliciousCount !== 1 ? 's' : ''} detected! Review and remove them in the Guardian report.`, 'View Report').then(choice => {
+                if (choice === 'View Report' && latestResult) {
+                    showReport(latestResult, context, 'extension-audit');
+                }
+            });
+        }
+        else {
+            vscode.window.showInformationMessage(`🛡️ Guardian: All ${report.totalAudited} installed extensions are clean (${report.userCount} user-installed, ${report.builtinCount} built-in).`);
         }
     }));
 }

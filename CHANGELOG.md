@@ -2,6 +2,31 @@
 
 All notable changes to the **Guardian Virus Scan** extension will be documented in this file.
 
+## [1.5.0] - 2026-08-20
+
+### Added
+- **2-Tab Navigation Dashboard**:
+  - Reorganized Guardian security report into a clean, modern 2-tab navigation structure:
+    - **Tab 1: Glassworm & Security Report** — Git workspace branch threat scans, threat matrix, whitelisted safe rules, and branch threat cards with code snippets.
+    - **Tab 2: Extension Audit** — Installed VS Code extension supply-chain scanner, malware blocklist detection (418+ IDs), invisible Unicode heuristics, and one-click removal.
+  - Sticky header tab bar with real-time dynamic status badges (`🔴 Threats` / `✓ Clean`).
+  - Active tab state persistence using VS Code webview API (`vscode.getState()` / `vscode.setState()`).
+  - Direct routing to Tab 2 via `Guardian: Audit Installed Extensions for Malware` and extension malware notification alerts.
+
+## [1.4.0] - 2026-08-20
+
+### Added
+- **Supply-Chain & Installed Extension Audit**:
+  - New **Audit Section** in the security report with an interactive **"Audit Extensions"** tool.
+  - Threat database containing 418+ canonical malicious extension IDs compiled from GlassWorm waves 1–5, Solana/Yeeth waves, Socket threat research, and Manifold evil-twin campaigns.
+  - Deep heuristic scanning of installed extension code bundles:
+    - Detects ForceMemo campaign wave markers (`lzcdrtfxyqiplpd`).
+    - Detects invisible Unicode variation selector payload runs (`U+FE00–U+FE0F`, `U+E0100–U+E01EF`).
+    - Detects invisible Unicode proximity decoder patterns (`codePointAt` + variation selector constants) while safely excluding legitimate libraries (`pdf.js`, `fontkit`, etc.).
+  - Animated live radar scanner view with real-time extension inspection ticker and progress feedback.
+  - One-click **"Remove All Malicious Extensions"** action and individual 1-by-1 **"Uninstall Extension"** buttons.
+  - Dedicated Command Palette action: `Guardian: Audit Installed Extensions for Malware`.
+
 ## [1.3.0] - 2026-08-20
 
 ### Added

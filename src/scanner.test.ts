@@ -138,8 +138,8 @@ function testBranchOverviewReport(): void {
   // 2: Chip click should not toggle collapse/expand (preventDefault & stopPropagation on bo-chips)
   assert.ok(html.includes('<div class="bo-chips" onclick="event.preventDefault(); event.stopPropagation()">'), 'bo-chips must have onclick event.preventDefault(); event.stopPropagation()');
 
-  // 3: Local & remote managed in 1 single chip like "1 Local • 2 Remote"
-  assert.ok(html.includes('1 Local • 2 Remote'), 'Should contain "1 Local • 2 Remote" in chip');
+  // 3: Local & remote managed in 1 single chip like "1 Local · 2 Remote"
+  assert.ok(html.includes('1 Local · 2 Remote'), 'Should contain "1 Local · 2 Remote" in chip');
   assert.ok(html.includes('bo-chip-counts'), 'Should use bo-chip-counts class for combined chip');
 
   // 4: Filter toolbar and tags
@@ -278,8 +278,183 @@ async function runAllTests() {
   testRemoteTrackingRefCoverage();
   testBranchOverviewReport();
   await testSafeRulesPreferences();
+  testExtensionAuditor();
   console.log('Guardian scanner regression tests passed.');
 }
 
+function testExtensionAuditor(): void {
+  const { scanFileContent, scanExtensionDirectory } = require('./extensionAuditor');
+  const { COMPROMISED_EXTENSIONS, WAVE_MARKER } = require('./auditData');
+
+  // 1. Blocklist lookup
+  assert.ok(COMPROMISED_EXTENSIONS['96-studio.json-formatter'], 'Should include wave-5 extension');
+  assert.strictEqual(COMPROMISED_EXTENSIONS['96-studio.json-formatter'].campaign, 'wave-5');
+  assert.strictEqual(COMPROMISED_EXTENSIONS['96-studio.json-formatter'].source, 'Socket.dev');
+
+  const blocklistThreats = scanExtensionDirectory('/nonexistent/path', '96-studio.json-formatter');
+  assert.strictEqual(blocklistThreats.length, 1);
+  assert.strictEqual(blocklistThreats[0].type, 'blocklist');
+  assert.strictEqual(blocklistThreats[0].rule, 'KNOWN_MALICIOUS_EXTENSION_ID');
+
+  // Clean extension lookup
+  const cleanThreats = scanExtensionDirectory('/nonexistent/path', 'some.clean-extension');
+  assert.strictEqual(cleanThreats.length, 0);
+
+  // 2. Wave marker detection
+  const codeWithWave = `// Normal JS\nconsole.log("hello");\nconst marker = "${WAVE_MARKER}";\n`;
+  const waveThreats = scanFileContent('extension.js', codeWithWave);
+  assert.strictEqual(waveThreats.length, 1);
+  assert.strictEqual(waveThreats[0].rule, 'GLASSWORM_WAVE_MARKER');
+
+  // 3. Invisible Unicode variation selector run
+  const invisibleChars = '\uFE00\uFE01\uFE02\uFE03\uFE04\uFE05\uFE06\uFE07'; // 8 variation selectors
+  const codeWithInvisible = `const payload = "${invisibleChars}";\n`;
+  const unicodeThreats = scanFileContent('dist/main.js', codeWithInvisible);
+  assert.strictEqual(unicodeThreats.length, 1);
+  assert.strictEqual(unicodeThreats[0].rule, 'INVISIBLE_UNICODE_VARIATION_SELECTORS');
+
+  // 4. Invisible Unicode decoder pattern
+  const codeWithDecoder = `
+    function decode(s) {
+      let v = s.codePointAt(0);
+      let offset = 0xFE00;
+      return String.fromCharCode(v - offset);
+    }
+  `;
+  const decoderThreats = scanFileContent('bundle.js', codeWithDecoder);
+  assert.strictEqual(decoderThreats.length, 1);
+  assert.strictEqual(decoderThreats[0].rule, 'INVISIBLE_UNICODE_DECODER');
+
+  // 5. Legitimate library exclusion
+  const legitCodeWithDecoder = `
+    // Inside pdf.worker.js
+    function handleFont(s) {
+      let v = s.codePointAt(0);
+      let offset = 0xFE00;
+      return v;
+    }
+  `;
+  const legitThreats = scanFileContent('node_modules/pdfjs-dist/build/pdf.worker.js', legitCodeWithDecoder);
+  assert.strictEqual(legitThreats.length, 0, 'Legitimate pdf.worker.js should be excluded from false positives');
+
+  // 6. Test Report HTML with Extension Audit
+  const scanResultWithAudit: WorkspaceScanResult = {
+    workspacePath: '/mock/repo',
+    projectType: 'node',
+    branches: [
+      {
+        branch: 'main (working tree)',
+        isCurrentBranch: true,
+        threats: [],
+        scannedFiles: ['package.json'],
+      },
+    ],
+    scanDurationMs: 15,
+    extensionAudit: {
+      totalAudited: 3,
+      userCount: 2,
+      builtinCount: 1,
+      maliciousCount: 1,
+      cleanCount: 2,
+      extensions: [
+        {
+          id: '96-studio.json-formatter',
+          displayName: 'JSON Formatter Pro',
+          version: '1.0.2',
+          publisher: '96-studio',
+          extensionPath: '/mock/extensions/96-studio.json-formatter',
+          isBuiltin: false,
+          status: 'malicious',
+          threats: [
+            {
+              type: 'blocklist',
+              rule: 'KNOWN_MALICIOUS_EXTENSION_ID',
+              detail: 'Matched known malicious extension database [Campaign: wave-5 · Source: Socket.dev].',
+              campaign: 'wave-5',
+              source: 'Socket.dev',
+            },
+          ],
+        },
+        {
+          id: 'esbenp.prettier-vscode',
+          displayName: 'Prettier - Code formatter',
+          version: '10.1.0',
+          publisher: 'esbenp',
+          extensionPath: '/mock/extensions/esbenp.prettier-vscode',
+          isBuiltin: false,
+          status: 'clean',
+          threats: [],
+          categories: ['Formatters'],
+          license: 'MIT',
+          marketplaceUrl: 'https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode',
+          repositoryUrl: 'https://github.com/prettier/prettier-vscode',
+          iconDataUri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        },
+        {
+          id: 'vscode.git',
+          displayName: 'Git',
+          version: '1.0.0',
+          publisher: 'vscode',
+          extensionPath: '/Applications/Visual Studio Code.app/Contents/Resources/app/extensions/git',
+          isBuiltin: true,
+          status: 'clean',
+          threats: [],
+        },
+      ],
+      scanDurationMs: 120,
+      timestamp: Date.now(),
+    },
+  };
+
+  const html = buildReportHtml(scanResultWithAudit);
+  assert.ok(html.includes('Supply-Chain Security & Extension Audit'), 'Should render Audit section title');
+  assert.ok(html.includes('1 Malicious Extension Detected!'), 'Should render malicious extension banner');
+  assert.ok(html.includes('Remove All (1)'), 'Should render Remove All button');
+  assert.ok(html.includes('Uninstall Extension'), 'Should render individual Uninstall Extension button');
+  assert.ok(html.includes('JSON Formatter Pro'), 'Should render malicious extension display name');
+  assert.ok(html.includes('Prettier - Code formatter'), 'Should render clean extension display name');
+  assert.ok(html.includes('Git'), 'Should render built-in extension display name');
+  assert.ok(html.includes('triggerExtensionAudit('), 'Should define triggerExtensionAudit');
+  assert.ok(html.includes('uninstallAllMalicious('), 'Should define uninstallAllMalicious');
+
+  // Verify Metadata and Minimal Layout (logo, name, 1 category, description, clean badge, uninstall button)
+  assert.ok(html.includes('Formatters'), 'Should render category chip');
+  assert.ok(html.includes('ext-icon-img'), 'Should render extension icon image');
+  assert.ok(html.includes('Prettier - Code formatter'), 'Should render extension title');
+  assert.ok(html.includes('✓ Clean'), 'Should render Clean badge');
+  assert.ok(html.includes('btn-uninstall-esbenp_prettier_vscode'), 'Should render uninstall button for clean user extension');
+  assert.ok(!html.includes('class="ext-license-chip"'), 'Should NOT render license chip');
+  assert.ok(!html.includes('Marketplace'), 'Should NOT render Marketplace link');
+  assert.ok(!html.includes('GitHub'), 'Should NOT render GitHub link');
+
+  // Verify Empty State and Filters
+  assert.ok(html.includes('id="ext-filter-empty-state"'), 'Should render extension empty state container');
+  assert.ok(html.includes('clearExtSearchAndFilter('), 'Should define clearExtSearchAndFilter');
+  assert.ok(html.includes('data-filter="user"'), 'Should render User Installed filter button');
+  assert.ok(html.includes('data-filter="builtin"'), 'Should render Built-in filter button');
+  assert.ok(html.includes('ext-stat-user'), 'Should render user installed stat count');
+  assert.ok(html.includes('ext-stat-builtin'), 'Should render built-in stat count');
+  assert.ok(html.includes('data-category="user"'), 'Should include data-category="user" on user card');
+  assert.ok(html.includes('data-category="builtin"'), 'Should include data-category="builtin" on builtin card');
+
+  // Verify Tab 1 & Tab 2 Navigation
+  assert.ok(html.includes('id="tab-btn-glassworm"'), 'Should render Tab 1 button');
+  assert.ok(html.includes('id="tab-btn-extension-audit"'), 'Should render Tab 2 button');
+  assert.ok(html.includes('Repo Audit'), 'Should render Tab 1 title');
+  assert.ok(html.includes('Extension Audit'), 'Should render Tab 2 title');
+  assert.ok(html.includes('Guardian — Glassworm &amp; Malware Scanner'), 'Should render full extension name in header');
+  assert.ok(html.includes('id="tab-glassworm"'), 'Should render Tab 1 pane');
+  assert.ok(html.includes('id="tab-extension-audit"'), 'Should render Tab 2 pane');
+  assert.ok(html.includes('switchTab('), 'Should include switchTab function in script');
+  assert.ok(html.includes('ext-stat-total'), 'Should include extension stats bar');
+
+  // Test opening directly with initialTab = 'extension-audit'
+  const extTabHtml = buildReportHtml(scanResultWithAudit, 'extension-audit');
+  assert.ok(extTabHtml.includes('class="nav-tab-btn active" id="tab-btn-extension-audit"'), 'Tab 2 button should be active when requested');
+  assert.ok(extTabHtml.includes('id="tab-extension-audit" class="tab-pane active"'), 'Tab 2 pane should be active when requested');
+  assert.ok(!extTabHtml.includes('id="tab-glassworm" class="tab-pane active"'), 'Tab 1 pane should not be active when Tab 2 is requested');
+}
+
 runAllTests();
+
 

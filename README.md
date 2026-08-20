@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="media/icon.png" width="160" height="160" alt="Guardian Logo" />
+  <img src="media/logo.png" width="160" height="160" alt="Guardian Logo" />
 </p>
 
 <h1 align="center">Guardian — Glassworm & Malware Scanner</h1>
@@ -35,17 +35,25 @@ When you open an untrusted project or pull a branch, attackers exploit automated
 ## 🚀 Quick Start (Zero Configuration Required)
 
 1. **Auto-Scan on Open**: Guardian automatically runs a silent background scan whenever you open a project in VS Code.
-2. **Status Bar Access**: Look at the bottom status bar for the `🛡️ Guardian` shield indicator. Click it anytime to open the interactive security report.
-3. **Manual Command**: Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and run:
+2. **2-Tab Interactive Dashboard**:
+   - **Tab 1: Glassworm & Security Report** — Git branch scans, threat breakdown matrix, whitelisted safe rules, and threat cards with quarantined code viewers.
+   - **Tab 2: Extension Audit** — Scan installed extensions against 418+ malicious signatures and invisible-Unicode heuristics with one-click removal.
+3. **Status Bar Access**: Look at the bottom status bar for the `🛡️ Guardian` shield indicator. Click it anytime to open the interactive security report.
+4. **Manual Commands**: Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and run:
    ```
    Guardian: Scan for Glassworm & Workspace Threats
+   Guardian: Open Glassworm & Security Report
+   Guardian: Audit Installed Extensions for Malware
    ```
-4. **Interactive Dashboard**: Inspect threat details, view quarantined snippets in read-only virtual tabs, or whitelist internal build rules with **Mark as Safe**.
+5. **Interactive Remediation**: Inspect threat details, remove malicious extensions with 1-click **"Remove All"** or 1-by-1 uninstallation, view quarantined snippets in read-only virtual tabs, or whitelist internal rules with **Mark as Safe**.
 
 ---
 
 ## 🛡️ Key Features
 
+* 📑 **2-Tab Security Dashboard**: Cleanly separated views for **Glassworm & Security Report** (Tab 1) and **Extension Audit** (Tab 2) with active status badges and state persistence.
+* 📦 **Supply-Chain Extension Auditor**: Audits all installed VS Code & editor extensions against a database of 418+ known malicious extension IDs and runs deep heuristic analysis (ForceMemo markers `lzcdrtfxyqiplpd`, invisible Unicode runs `U+FE00–U+FE0F`/`U+E0100–U+E01EF`, and decoder patterns).
+* 🗑️ **One-Click Extension Remediation**: Remove all detected malicious extensions at once or uninstall them 1-by-1 directly from the report view with CLI fallback commands.
 * 🔍 **Multi-Branch & Ref Scanner**: Inspects all local branches and remote-tracking refs directly via safe Git object database reads.
 * 🌳 **Working Tree & Untracked Coverage**: Detects ignored, untracked, and newly modified high-risk files in your active workspace.
 * 🔒 **Zero Workspace Disturbance**: Never checks out branches, never alters your Git index, never executes repository files, and never contacts remote servers.
