@@ -487,12 +487,10 @@ function activate(context) {
             }
         }
         updateStatusBar(latestResult, false);
-        if (!hasValidScan)
+        if (!hasValidScan || !latestResult)
             return;
-        // If report panel was already open from a previous session, refresh it
-        if (reportPanel && latestResult) {
-            showReport(latestResult, context);
-        }
+        // Automatically open the report panel when scan is complete
+        showReport(latestResult, context);
         // Exactly 1 message for all workspaces on startup
         if (totalActiveThreats > 0) {
             vscode.window.showWarningMessage(`🚨 Guardian: ${totalActiveThreats} threat${totalActiveThreats !== 1 ? 's' : ''} detected across workspace.`, 'View Report').then(choice => {

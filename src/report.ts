@@ -710,24 +710,6 @@ function buildCredentialSection(audit?: CredentialScanReport): string {
       <div id="credential-audit-container">
         <div class="branches-section">
           ${optionsToolbar}
-          <div class="cred-initial-hero">
-            <div class="cred-hero-icon-box">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-              </svg>
-            </div>
-            <div class="cred-hero-text">
-              <h3>High-Precision Credential &amp; Token Scanner</h3>
-              <p>Detect leaked API keys, tokens, and private keys across 17+ pattern families (GitHub PATs, AWS Access Keys, OpenAI Keys, Stripe, Anthropic, Private Keys, .npmrc, .env).</p>
-              <div class="cred-hero-pills">
-                <span class="pill-feat">🔒 Zero Plaintext Storage</span>
-                <span class="pill-feat">🛡️ SHA-256 Fingerprinting</span>
-                <span class="pill-feat">⚡ Shannon Entropy Filtering</span>
-                <span class="pill-feat">📜 Git History Inspection</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     `;
@@ -914,7 +896,7 @@ export function buildReportHtml(
   const credRemotes = credAudit ? credAudit.remotesCount : 0;
   const credOrgAlerts = credAudit ? credAudit.orgAlertsCount : 0;
   const tab3Badge = credCritical > 0
-    ? `<span class="nav-tab-status status-danger" id="nav-tab-cred-badge" title="${credCritical} critical secret(s)">🔴 ${credCritical}</span>`
+    ? `<span class="nav-tab-status status-danger" id="nav-tab-cred-badge" title="${credCritical} critical secret(s)">🪲</span>`
     : credAudit
       ? `<span class="nav-tab-status status-clean" id="nav-tab-cred-badge" title="No critical secrets detected">✓</span>`
       : `<span class="nav-tab-status status-clean" id="nav-tab-cred-badge" title="Credential scan ready">—</span>`;
@@ -4020,7 +4002,7 @@ export function buildReportHtml(
     if (badge) {
       if (report.criticalCount > 0) {
         badge.className = 'nav-tab-status status-danger';
-        badge.textContent = '🔴 ' + report.criticalCount;
+        badge.textContent = '🪲';
         badge.title = report.criticalCount + ' critical secret(s)';
       } else {
         badge.className = 'nav-tab-status status-clean';

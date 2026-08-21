@@ -589,12 +589,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     updateStatusBar(latestResult, false);
 
-    if (!hasValidScan) return;
+    if (!hasValidScan || !latestResult) return;
 
-    // If report panel was already open from a previous session, refresh it
-    if (reportPanel && latestResult) {
-      showReport(latestResult, context);
-    }
+    // Automatically open the report panel when scan is complete
+    showReport(latestResult, context);
 
     // Exactly 1 message for all workspaces on startup
     if (totalActiveThreats > 0) {
