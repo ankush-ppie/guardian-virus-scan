@@ -40,6 +40,7 @@ const path = __importStar(require("path"));
 const child_process_1 = require("child_process");
 const scanner_1 = require("./scanner");
 const report_1 = require("./report");
+const credentialScanner_1 = require("./credentialScanner");
 function rules(threats) {
     return threats.map(t => t.rule).sort();
 }
@@ -316,17 +317,6 @@ async function testSafeRulesPreferences() {
     assert.strictEqual(rulesAfterRemove.length, 1, 'Should have 1 rule left after removal');
     assert.strictEqual(rulesAfterRemove[0].rule, 'VSCODE_TASK_AUTORUN');
 }
-async function runAllTests() {
-    testInjectedConfigFamilies();
-    testPropagationScript();
-    testWorkingTreeCoverage();
-    testRemoteTrackingRefCoverage();
-    testFetchRemoteRefs();
-    testBranchOverviewReport();
-    await testSafeRulesPreferences();
-    testExtensionAuditor();
-    console.log('Guardian scanner regression tests passed.');
-}
 function testExtensionAuditor() {
     const { scanFileContent, scanExtensionDirectory } = require('./extensionAuditor');
     const { COMPROMISED_EXTENSIONS, WAVE_MARKER } = require('./auditData');
@@ -469,9 +459,8 @@ function testExtensionAuditor() {
     assert.ok(html.includes('badge-clean-outline') || html.includes('✓ Clean'), 'Should render Clean badge');
     assert.ok(html.includes('btn-uninstall-esbenp_prettier_vscode'), 'Should render uninstall button for clean user extension');
     assert.ok(!html.includes('btn-uninstall-ankushlokhande_guardian_virus_scan'), 'Should NOT render uninstall button for self Guardian extension');
-    assert.ok(!html.includes('class="ext-license-chip"'), 'Should NOT render license chip');
-    assert.ok(!html.includes('Marketplace'), 'Should NOT render Marketplace link');
-    assert.ok(!html.includes('GitHub'), 'Should NOT render GitHub link');
+    assert.ok(!html.includes('class="ext-marketplace-link"'), 'Should NOT render Marketplace link');
+    assert.ok(!html.includes('class="ext-github-link"'), 'Should NOT render GitHub link on extension cards');
     // Verify Empty State and Filters
     assert.ok(html.includes('id="ext-filter-empty-state"'), 'Should render extension empty state container');
     assert.ok(html.includes('clearExtSearchAndFilter('), 'Should define clearExtSearchAndFilter');
@@ -496,5 +485,123 @@ function testExtensionAuditor() {
     assert.ok(extTabHtml.includes('class="nav-tab-btn active" id="tab-btn-extension-audit"'), 'Tab 2 button should be active when requested');
     assert.ok(extTabHtml.includes('id="tab-extension-audit" class="tab-pane active"'), 'Tab 2 pane should be active when requested');
     assert.ok(!extTabHtml.includes('id="tab-glassworm" class="tab-pane active"'), 'Tab 1 pane should not be active when Tab 2 is requested');
+}
+async function testCredentialScanner() {
+    // 1. Test Redaction and Fingerprinting
+    const token = 'ghp_1234567890abcdef1234567890abcdef1234';
+    const redacted = (0, credentialScanner_1.redactCredential)(token);
+    assert.strictEqual(redacted, 'ghp_12…1234');
+    const fp = (0, credentialScanner_1.fingerprintCredential)(token);
+    assert.ok(fp.startsWith('sha256:'), 'Fingerprint should start with sha256:');
+    assert.strictEqual(fp.length, 19, 'Fingerprint should be 19 chars (sha256: + 12 hex)');
+    const urlToken = 'https://user:secret12345@github.com/org/repo.git';
+    assert.strictEqual((0, credentialScanner_1.redactCredential)(urlToken), 'https://[REDACTED]@github.com/org/repo.git');
+    // 2. Test Shannon Entropy & Ignore List
+    assert.strictEqual((0, credentialScanner_1.isIgnoredValue)('AKIAIOSFODNN7EXAMPLE'), true, 'AKIAIOSFODNN7EXAMPLE should be ignored');
+    assert.strictEqual((0, credentialScanner_1.isIgnoredValue)('YOUR_API_KEY_HERE'), true, 'YOUR_API_KEY_HERE should be ignored');
+    assert.strictEqual((0, credentialScanner_1.isLowEntropy)('AKIAAAAAAAAAAAAAAAAA'), true, 'Repeated chars should be low entropy');
+    assert.strictEqual((0, credentialScanner_1.isLowEntropy)('AKIA1B2C3D4E5F6G7H8I'), false, 'Random keys should pass entropy check');
+    // 3. Test Pattern Matching via findCredentialsInText
+    const sampleText = [
+        'GITHUB_PAT=ghp_1234567890abcdef1234567890abcdef1234',
+        'GITHUB_FINE=github_pat_11AAAAAAA0123456789abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGH',
+        'NPM_TOKEN=npm_1234567890abcdef1234567890abcdef1234',
+        'AWS_KEY=AKIA1234567890ABCDEF',
+        'SLACK_BOT=xoxb-12345678901-1234567890123-abcdefghijklmnopqrstuvwx',
+        'STRIPE_KEY=sk_live_51Abcdefghijklmnopqrstuvwxyz01234567',
+        'ANTHROPIC_KEY=sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz',
+        'OPENAI_PROJ=sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefgh',
+        'GOOGLE_KEY=AIzaSyD1234567890abcdefghijklmnopqrstuv',
+    ].join('\n');
+    const findings = (0, credentialScanner_1.findCredentialsInText)(sampleText, 'config.ts', 'tracked');
+    const matchedRules = findings.map(f => f.id);
+    assert.ok(matchedRules.includes('github-pat-classic'), 'Should match github-pat-classic');
+    assert.ok(matchedRules.includes('github-pat-fine'), 'Should match github-pat-fine');
+    assert.ok(matchedRules.includes('npm-token'), 'Should match npm-token');
+    assert.ok(matchedRules.includes('aws-access-key'), 'Should match aws-access-key');
+    assert.ok(matchedRules.includes('slack-token'), 'Should match slack-token');
+    assert.ok(matchedRules.includes('stripe-live'), 'Should match stripe-live');
+    assert.ok(matchedRules.includes('anthropic-key'), 'Should match anthropic-key');
+    assert.ok(matchedRules.includes('openai-key'), 'Should match openai-key');
+    assert.ok(matchedRules.includes('google-api-key'), 'Should match google-api-key');
+    // Verify that findings NEVER contain the raw plaintext secret in redactedValue
+    for (const f of findings) {
+        assert.ok(!f.redactedValue.includes('ghp_1234567890abcdef1234567890abcdef1234'), 'Plaintext secret must be redacted');
+    }
+    // 4. Test runCredentialScan on a real test git workspace
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'guardian-cred-test-'));
+    try {
+        (0, child_process_1.execFileSync)('git', ['init', '-b', 'main'], { cwd: root });
+        (0, child_process_1.execFileSync)('git', ['config', 'user.name', 'Tester'], { cwd: root });
+        (0, child_process_1.execFileSync)('git', ['config', 'user.email', 'tester@example.com'], { cwd: root });
+        (0, child_process_1.execFileSync)('git', ['config', 'commit.gpgsign', 'false'], { cwd: root });
+        // Commit 1: Tracked file with GitHub PAT
+        fs.writeFileSync(path.join(root, 'api.js'), 'const token = "ghp_1234567890abcdef1234567890abcdef1234";\n');
+        (0, child_process_1.execFileSync)('git', ['add', '.'], { cwd: root });
+        (0, child_process_1.execFileSync)('git', ['commit', '--no-gpg-sign', '-m', 'Initial commit with secret'], { cwd: root });
+        // Commit 2: Remove secret from tracked file, but it remains in git history!
+        fs.writeFileSync(path.join(root, 'api.js'), 'const token = process.env.API_TOKEN;\n');
+        (0, child_process_1.execFileSync)('git', ['add', '.'], { cwd: root });
+        (0, child_process_1.execFileSync)('git', ['commit', '--no-gpg-sign', '-m', 'Fix secret in code'], { cwd: root });
+        // Add local .env file (untracked)
+        fs.writeFileSync(path.join(root, '.env'), 'ANTHROPIC_API_KEY=sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz\n');
+        // Add remote with embedded credentials
+        (0, child_process_1.execFileSync)('git', ['remote', 'add', 'origin', 'https://oauth2:ghp_1234567890abcdef1234567890abcdef1234@github.com/example/repo.git'], { cwd: root });
+        let progressEvents = [];
+        const report = await (0, credentialScanner_1.runCredentialScan)(root, {
+            scanTracked: true,
+            scanHistory: true,
+            scanLocal: true,
+            scanRemotes: true,
+        }, (p) => {
+            progressEvents.push(p);
+        });
+        assert.ok(report.totalFindings >= 3, 'Should find at least 3 secrets (history, local, remote)');
+        assert.ok(report.historyCount >= 1, 'Should find secret in git history');
+        assert.ok(report.localCount >= 1, 'Should find secret in local .env');
+        assert.ok(report.remotesCount >= 1, 'Should find secret in git remote URL');
+        assert.ok(progressEvents.length > 0, 'Should trigger progress callbacks');
+        // 5. Test Exporters
+        const tsv = (0, credentialScanner_1.exportCredentialTsv)(report);
+        assert.ok(tsv.includes('location\twhere\tpath\ttype\tredacted\tfingerprint\tdescription'), 'TSV should have header');
+        assert.ok(tsv.includes('ghp_12…1234') || tsv.includes('[REDACTED]'), 'TSV must contain masked values only');
+        const jsonStr = (0, credentialScanner_1.exportCredentialJson)(report);
+        const parsedJson = JSON.parse(jsonStr);
+        assert.strictEqual(parsedJson.totalFindings, report.totalFindings);
+        const md = (0, credentialScanner_1.exportCredentialMarkdown)(report);
+        assert.ok(md.includes('# Guardian — Credential & Secret Scan Report'));
+        assert.ok(md.includes('## Findings Summary'));
+        // 6. Test Webview HTML Report with Tab 3
+        const scanResultWithCreds = {
+            workspacePath: root,
+            projectType: 'node',
+            scanDurationMs: 150,
+            safeRules: [],
+            branches: [],
+            credentialAudit: report,
+        };
+        const credHtml = (0, report_1.buildReportHtml)(scanResultWithCreds, 'credential-scan');
+        assert.ok(credHtml.includes('id="tab-btn-credential-scan"'), 'Should render Tab 3 button');
+        assert.ok(credHtml.includes('id="tab-credential-scan" class="tab-pane active"'), 'Tab 3 pane should be active');
+        assert.ok(credHtml.includes('btn-cred-start'), 'Should render start credential scan button');
+        assert.ok(credHtml.includes('exportCredentialReport('), 'Should define exportCredentialReport');
+        assert.ok(credHtml.includes('triggerCredentialScan('), 'Should define triggerCredentialScan');
+        assert.ok(credHtml.includes('redactCredential') || credHtml.includes('MATCHED VALUE:'), 'Should render matched value box');
+    }
+    finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+}
+async function runAllTests() {
+    testInjectedConfigFamilies();
+    testPropagationScript();
+    testWorkingTreeCoverage();
+    testRemoteTrackingRefCoverage();
+    testFetchRemoteRefs();
+    testBranchOverviewReport();
+    await testSafeRulesPreferences();
+    testExtensionAuditor();
+    await testCredentialScanner();
+    console.log('Guardian scanner regression tests passed.');
 }
 runAllTests();

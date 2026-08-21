@@ -1,6 +1,7 @@
 import { WorkspaceScanResult, BranchScanResult, Threat, getActiveThreats, getSafeThreats } from './scanner';
 import { SafeRuleEntry } from './preferences';
 import { ExtensionAuditReport, AuditedExtension, ExtensionThreat } from './extensionAuditor';
+import { CredentialScanReport, CredentialThreat } from './credentialScanner';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -524,10 +525,342 @@ function buildExtensionCard(ext: AuditedExtension, activeFilter: string = 'user'
   `;
 }
 
+function credentialLocationLabel(locationType: string): string {
+  switch (locationType) {
+    case 'tracked': return '💻 Tracked in Git';
+    case 'history': return '📜 Git Commit History';
+    case 'local': return '📄 Local File (.env/disk)';
+    case 'git-remote': return '🌐 Git Remote (.git/config)';
+    case 'github-alert': return '☁️ GitHub Alert';
+    default: return locationType;
+  }
+}
+
+function buildCredentialCard(threat: CredentialThreat, uid: string): string {
+  const isCritical = threat.severity === 'critical';
+  const isReview = threat.severity === 'review';
+  const isSafe = !!threat.isSafe;
+
+  const sevColor = isSafe ? 'var(--green)' : isCritical ? 'var(--red)' : isReview ? 'var(--yellow)' : 'var(--blue)';
+  const sevBg = isSafe ? 'var(--bg-green-soft)' : isCritical ? 'var(--bg-red-soft)' : isReview ? 'var(--bg-yellow-soft)' : 'var(--bg3)';
+  const sevBorder = isSafe ? 'rgba(74, 222, 128, 0.3)' : isCritical ? 'var(--border-red)' : isReview ? 'var(--border-yellow)' : 'var(--border)';
+  const sevText = isSafe ? 'SAFE' : isCritical ? 'CRITICAL SECRET' : isReview ? 'REVIEW REQUIRED' : 'INFO';
+
+  const drawerId = `cred-drawer-${uid}`;
+  const drawerBtnId = `cred-btn-drawer-${uid}`;
+
+  return `
+    <div class="cred-card ${isSafe ? 'is-safe' : isCritical ? 'is-critical' : 'is-review'}"
+         id="cred-card-${uid}"
+         data-sev="${threat.severity}"
+         data-safe="${isSafe ? 'true' : 'false'}"
+         data-location="${threat.locationType}"
+         data-search="${escHtml((threat.ruleName + ' ' + threat.file + ' ' + (threat.commit || '') + ' ' + (threat.branch || '') + ' ' + threat.redactedValue + ' ' + threat.fingerprint).toLowerCase())}">
+      <div class="cred-card-left-bar" style="background:${sevColor}"></div>
+      <div class="cred-card-body">
+        <div class="cred-card-header">
+          <div class="cred-header-left">
+            <span class="sev-pill" style="background:${sevBg};color:${sevColor};border:1px solid ${sevBorder}">${sevText}</span>
+            <span class="cred-type-badge">${escHtml(threat.ruleName)}</span>
+            <span class="cred-location-badge loc-${threat.locationType}">${credentialLocationLabel(threat.locationType)}</span>
+          </div>
+          <div class="cred-header-right">
+            <button class="cred-file-link-btn" 
+                    data-file="${escHtml(threat.file)}"
+                    data-line="${threat.line || 1}"
+                    data-location-type="${escHtml(threat.locationType)}"
+                    data-branch-commit="${escHtml(threat.commit || threat.branch || '')}"
+                    onclick="openCredentialLocationBtn(this)" 
+                    title="Open file in editor">
+              <span class="file-icon">📄</span>
+              <span class="file-name">${escHtml(threat.file)}${threat.line ? `:${threat.line}` : ''}</span>
+              ${threat.commit ? `<span class="commit-pill">commit: ${escHtml(threat.commit)}</span>` : ''}
+              ${threat.branch ? `<span class="branch-pill">${escHtml(threat.branch)}</span>` : ''}
+            </button>
+          </div>
+        </div>
+
+        <div class="cred-desc">${escHtml(threat.description)}</div>
+
+        <div class="cred-value-box">
+          <div class="cred-value-left">
+            <span class="cred-value-label">MATCHED VALUE:</span>
+            <code class="cred-value-code">${escHtml(threat.redactedValue)}</code>
+            <span class="cred-fp-badge" title="SHA-256 Fingerprint">${escHtml(threat.fingerprint)}</span>
+          </div>
+          <div class="cred-value-actions">
+            <button class="cred-copy-btn" data-value="${escHtml(threat.redactedValue)}" onclick="copyRedactedBtn(this)" title="Copy Redacted Value">
+              <span class="btn-icon">📋</span> Copy Masked
+            </button>
+            <button class="cred-copy-btn" data-value="${escHtml(threat.fingerprint)}" onclick="copyFingerprintBtn(this)" title="Copy SHA-256 Fingerprint">
+              <span class="btn-icon">🔑</span> Copy SHA-256
+            </button>
+            <button class="cred-remediation-btn" id="${drawerBtnId}" data-drawer="${drawerId}" onclick="toggleRemediationDrawerBtn(this)">
+              <span class="btn-icon">🛠️</span> Remediation Steps ▾
+            </button>
+          </div>
+        </div>
+
+        ${threat.snippet ? `
+          <div class="cred-snippet-wrap">
+            <div class="cred-snippet-header">
+              <span class="snippet-tag">Context Snippet</span>
+            </div>
+            <pre class="cred-snippet-pre">${escHtml(threat.snippet)}</pre>
+          </div>
+        ` : ''}
+
+        <div class="cred-remediation-drawer" id="${drawerId}" style="display:none;">
+          <div class="remediation-inner">
+            <div class="remediation-header">
+              <span class="remediation-icon">🛡️</span>
+              <span class="remediation-title">${escHtml(threat.remediation?.title || 'Remediation Steps')}</span>
+              ${threat.remediation?.docUrl ? `
+                <a href="${escHtml(threat.remediation.docUrl)}" target="_blank" class="remediation-link">
+                  Official Revocation Portal ↗
+                </a>
+              ` : ''}
+            </div>
+            <ol class="remediation-steps">
+              ${(threat.remediation?.steps || []).map(s => `<li>${escHtml(s)}</li>`).join('')}
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function buildCredentialSection(audit?: CredentialScanReport): string {
+  const hasAudit = !!audit;
+  const totalFindings = audit?.totalFindings || 0;
+  const criticalCount = audit?.criticalCount || 0;
+  const reviewCount = audit?.reviewCount || 0;
+  const trackedCount = audit?.trackedCount || 0;
+  const historyCount = audit?.historyCount || 0;
+  const localCount = audit?.localCount || 0;
+  const remotesCount = audit?.remotesCount || 0;
+  const orgAlertsCount = audit?.orgAlertsCount || 0;
+
+  const isCritical = criticalCount > 0;
+  const isClean = totalFindings === 0;
+
+  // Options Toolbar
+  const optionsToolbar = `
+    <div class="cred-options-card">
+      <div class="cred-options-header">
+        <div class="options-title-box">
+          <span class="options-icon">⚙️</span>
+          <span class="options-title">Scan Scope &amp; Target Coverage</span>
+        </div>
+        <div class="options-actions">
+          <button class="cred-start-btn" id="btn-cred-start" onclick="triggerCredentialScan()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            ${hasAudit ? 'Re-Run Secret Scan' : 'Run Credential Scan'}
+          </button>
+          ${hasAudit ? `
+            <div class="cred-export-dropdown">
+              <button class="cred-export-btn" onclick="exportCredentialReport('tsv')" title="Export TSV Report (mode 0600)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export Redacted TSV
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+      <div class="cred-options-grid">
+        <label class="cred-option-checkbox">
+          <input type="checkbox" id="cred-opt-tracked" checked />
+          <span class="opt-label-text">
+            <strong>Tracked Branch Tips</strong>
+            <span class="opt-sub">Committed files across all local &amp; remote refs</span>
+          </span>
+        </label>
+        <label class="cred-option-checkbox">
+          <input type="checkbox" id="cred-opt-history" />
+          <span class="opt-label-text">
+            <strong>Deep Git History (<code>--history</code>)</strong>
+            <span class="opt-sub">Inspect past commit diffs (catches deleted secrets)</span>
+          </span>
+        </label>
+        <label class="cred-option-checkbox">
+          <input type="checkbox" id="cred-opt-local" checked />
+          <span class="opt-label-text">
+            <strong>Local &amp; Untracked Files (<code>--local</code>)</strong>
+            <span class="opt-sub">Check disk files (.env, .npmrc, untracked scripts)</span>
+          </span>
+        </label>
+        <label class="cred-option-checkbox">
+          <input type="checkbox" id="cred-opt-remotes" checked />
+          <span class="opt-label-text">
+            <strong>Git Remote URLs</strong>
+            <span class="opt-sub">Check <code>.git/config</code> for embedded tokens</span>
+          </span>
+        </label>
+      </div>
+      <div class="cred-org-row">
+        <span class="cred-org-label">☁️ GitHub Organization (Optional):</span>
+        <input type="text" class="cred-org-input" id="cred-opt-orgs" placeholder="e.g. my-organization (queries open GitHub Secret Scanning alerts)" />
+      </div>
+    </div>
+  `;
+
+  if (!hasAudit) {
+    return `
+      <div id="credential-audit-container">
+        <div class="branches-section">
+          ${optionsToolbar}
+          <div class="cred-initial-hero">
+            <div class="cred-hero-icon-box">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+            </div>
+            <div class="cred-hero-text">
+              <h3>High-Precision Credential &amp; Token Scanner</h3>
+              <p>Detect leaked API keys, tokens, and private keys across 17+ pattern families (GitHub PATs, AWS Access Keys, OpenAI Keys, Stripe, Anthropic, Private Keys, .npmrc, .env).</p>
+              <div class="cred-hero-pills">
+                <span class="pill-feat">🔒 Zero Plaintext Storage</span>
+                <span class="pill-feat">🛡️ SHA-256 Fingerprinting</span>
+                <span class="pill-feat">⚡ Shannon Entropy Filtering</span>
+                <span class="pill-feat">📜 Git History Inspection</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const summaryBanner = isCritical
+    ? `
+    <div class="summary-hero danger" id="cred-summary-banner">
+      <div class="hero-left">
+        <div class="hero-icon">🚨</div>
+        <div class="hero-text">
+          <div class="hero-title">${criticalCount} Critical Secret${criticalCount !== 1 ? 's' : ''} Exposed!</div>
+          <div class="hero-sub">Exposed active credentials grant unauthorized access. Revoke at the service provider immediately. Deleting files or commits does not revoke live keys.</div>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Re-Scan
+        </button>
+      </div>
+    </div>`
+    : reviewCount > 0
+      ? `
+    <div class="summary-hero warn" id="cred-summary-banner">
+      <div class="hero-left">
+        <div class="hero-icon">⚠️</div>
+        <div class="hero-text">
+          <div class="hero-title">${reviewCount} Credential${reviewCount !== 1 ? 's' : ''} Require Review</div>
+          <div class="hero-sub">Found keys (e.g. Google API Keys) that may be public or unrestricted. Verify key restrictions in Cloud Console.</div>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Re-Scan
+        </button>
+      </div>
+    </div>`
+      : `
+    <div class="summary-hero ok" id="cred-summary-banner">
+      <div class="hero-left">
+        <div class="hero-check-circle">✓</div>
+        <div class="hero-text">
+          <div class="hero-title">No exposed credentials or secrets detected</div>
+          <div class="hero-sub">Scanned workspace coverage — no token-shaped keys, private keys, or exposed credentials found.</div>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Re-Scan
+        </button>
+      </div>
+    </div>`;
+
+  const cardsHtml = audit.findings.map((t, idx) => buildCredentialCard(t, `cred-${idx}`)).join('');
+
+  return `
+    <div id="credential-audit-container">
+      ${summaryBanner}
+      <div class="branches-section">
+        ${optionsToolbar}
+
+        <div class="branches-toolbar" style="margin-top: 16px;">
+          <div class="branches-toolbar-left">
+            <span class="branches-toolbar-title">Credential &amp; Secret Findings</span>
+            <span class="branches-filter-count" id="cred-filter-count">Showing all ${totalFindings} findings</span>
+          </div>
+          <div class="branches-filter-controls">
+            <div class="filter-group">
+              <span class="filter-group-label">Severity:</span>
+              <div class="filter-group-buttons">
+                <button class="filter-tag active" data-cred-filter="all" onclick="handleCredFilterClick(this)">All (${totalFindings})</button>
+                <button class="filter-tag filter-tag-infected ${criticalCount > 0 ? 'has-badge' : ''}" data-cred-filter="critical" onclick="handleCredFilterClick(this)">🔴 Critical (${criticalCount})</button>
+                <button class="filter-tag" data-cred-filter="review" onclick="handleCredFilterClick(this)">🟡 Review (${reviewCount})</button>
+              </div>
+            </div>
+            <div class="filter-group">
+              <span class="filter-group-label">Source:</span>
+              <div class="filter-group-buttons">
+                <button class="filter-tag active" data-cred-location="all" onclick="handleCredLocationFilterClick(this)">All</button>
+                ${trackedCount > 0 ? `<button class="filter-tag" data-cred-location="tracked" onclick="handleCredLocationFilterClick(this)">💻 Tracked (${trackedCount})</button>` : ''}
+                ${historyCount > 0 ? `<button class="filter-tag" data-cred-location="history" onclick="handleCredLocationFilterClick(this)">📜 History (${historyCount})</button>` : ''}
+                ${localCount > 0 ? `<button class="filter-tag" data-cred-location="local" onclick="handleCredLocationFilterClick(this)">📄 Local .env (${localCount})</button>` : ''}
+                ${remotesCount > 0 ? `<button class="filter-tag" data-cred-location="git-remote" onclick="handleCredLocationFilterClick(this)">🌐 Remote (${remotesCount})</button>` : ''}
+                ${orgAlertsCount > 0 ? `<button class="filter-tag" data-cred-location="github-alert" onclick="handleCredLocationFilterClick(this)">☁️ Org Alert (${orgAlertsCount})</button>` : ''}
+              </div>
+            </div>
+            <div class="ext-search-box">
+              <span class="ext-search-icon">🔍</span>
+              <input type="text" class="ext-search-input" id="cred-search-input" placeholder="Search secrets, files, commits, fingerprints..." oninput="searchCredentials(this.value)" />
+            </div>
+          </div>
+        </div>
+
+        <div class="cred-cards-list" id="cred-cards-list">
+          ${cardsHtml}
+          <div id="cred-filter-empty-state" class="ext-filter-empty-state" style="${totalFindings === 0 ? 'display:flex;' : 'display:none;'}">
+            <div class="empty-state-icon-box">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </div>
+            <div class="empty-state-title" id="cred-empty-msg">No credentials match the selected filter.</div>
+            <div class="empty-state-sub" id="cred-empty-sub">Try changing your severity, location, or search filters above.</div>
+            <button class="ext-reset-btn" onclick="clearCredSearchAndFilter()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              Reset Filters
+            </button>
+          </div>
+        </div>
+
+        <div class="cred-incident-card">
+          <div class="incident-card-header">
+            <span class="incident-icon">🚨</span>
+            <h4>Incident Response &amp; Secret Revocation Rules</h4>
+          </div>
+          <div class="incident-card-content">
+            <p><strong>1. Revoke First, Rotate Second:</strong> If active compromise is suspected, revoke the credential immediately at the vendor dashboard. Deleting a file or rewriting Git history does <em>not</em> deactivate an exposed key.</p>
+            <p><strong>2. Purge Historic Commits:</strong> To completely wipe deleted secrets from Git history, use <code>git filter-repo</code>:</p>
+            <pre class="incident-code">git filter-repo --invert-paths --path &lt;relative-file-path&gt;</pre>
+            <p><strong>3. Never Commit Plaintext Secrets:</strong> Use environment variables (<code>.env</code> in <code>.gitignore</code>), secret stores (AWS Secrets Manager, GCP Secret Manager, Vault), or GitHub Secrets for CI/CD workflows.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 export function buildReportHtml(
   result: WorkspaceScanResult,
-  initialTab: 'glassworm' | 'extension-audit' = 'glassworm'
+  initialTab: 'glassworm' | 'extension-audit' | 'credential-scan' = 'glassworm'
 ): string {
+  const version = result.version || '1.5.0';
   const allThreats = result.branches.flatMap(b => b.threats);
   const activeThreats = getActiveThreats(allThreats);
   const safeThreats = getSafeThreats(allThreats);
@@ -569,6 +902,22 @@ export function buildReportHtml(
   const tab2Badge = extMalicious > 0
     ? `<span class="nav-tab-status status-danger" id="nav-tab-ext-badge" title="${extMalicious} infected extension(s)">🪲</span>`
     : `<span class="nav-tab-status status-clean" id="nav-tab-ext-badge" title="Installed extensions clean">✓</span>`;
+
+  // Tab 3 (Credential Scan) status icon
+  const credAudit = result.credentialAudit;
+  const credTotal = credAudit ? credAudit.totalFindings : 0;
+  const credCritical = credAudit ? credAudit.criticalCount : 0;
+  const credReview = credAudit ? credAudit.reviewCount : 0;
+  const credTracked = credAudit ? credAudit.trackedCount : 0;
+  const credHistory = credAudit ? credAudit.historyCount : 0;
+  const credLocal = credAudit ? credAudit.localCount : 0;
+  const credRemotes = credAudit ? credAudit.remotesCount : 0;
+  const credOrgAlerts = credAudit ? credAudit.orgAlertsCount : 0;
+  const tab3Badge = credCritical > 0
+    ? `<span class="nav-tab-status status-danger" id="nav-tab-cred-badge" title="${credCritical} critical secret(s)">🔴 ${credCritical}</span>`
+    : credAudit
+      ? `<span class="nav-tab-status status-clean" id="nav-tab-cred-badge" title="No critical secrets detected">✓</span>`
+      : `<span class="nav-tab-status status-clean" id="nav-tab-cred-badge" title="Credential scan ready">—</span>`;
 
   return `<!DOCTYPE html>
 <html>
@@ -1806,6 +2155,465 @@ export function buildReportHtml(
       padding: 3px 8px; border-radius: 12px;
     }
 
+    /* ─── Tab 3: Credential & Secret Scanner Styles ─── */
+    .cred-options-card {
+      background: #11161e;
+      border: 1px solid #1d2533;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .cred-options-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .options-title-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .options-icon { font-size: 14px; }
+    .options-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .options-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .cred-start-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #2563eb;
+      color: #ffffff;
+      border: 1px solid #2563eb;
+      padding: 7px 16px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    .cred-start-btn:hover {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+      transform: translateY(-1px);
+    }
+    .cred-export-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #161f2e;
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 7px 14px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    .cred-export-btn:hover {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: #38bdf8;
+      transform: translateY(-1px);
+    }
+    .cred-options-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+    .cred-option-checkbox {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      background: #151b26;
+      border: 1px solid #1e2634;
+      border-radius: 8px;
+      padding: 9px 12px;
+      cursor: pointer;
+      transition: border-color 0.12s ease, background 0.12s ease;
+    }
+    .cred-option-checkbox:hover {
+      background: #18202d;
+      border-color: #273449;
+    }
+    .cred-option-checkbox input[type="checkbox"] {
+      margin-top: 2px;
+      accent-color: #38bdf8;
+      cursor: pointer;
+    }
+    .opt-label-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .opt-label-text strong {
+      font-size: 12px;
+      color: var(--text);
+    }
+    .opt-sub {
+      font-size: 10.5px;
+      color: var(--text3);
+      line-height: 1.35;
+    }
+    .cred-org-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #151b26;
+      border: 1px solid #1e2634;
+      border-radius: 8px;
+      padding: 8px 12px;
+    }
+    .cred-org-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text2);
+      white-space: nowrap;
+    }
+    .cred-org-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 12px;
+      outline: none;
+    }
+    .cred-org-input::placeholder {
+      color: var(--text3);
+    }
+
+    .cred-initial-hero {
+      background: #11161e;
+      border: 1px solid #1d2533;
+      border-radius: 10px;
+      padding: 28px 24px;
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .cred-hero-icon-box {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .cred-hero-text h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 5px;
+    }
+    .cred-hero-text p {
+      font-size: 12.5px;
+      color: var(--text2);
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+    .cred-hero-pills {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .pill-feat {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      background: #18202e;
+      border: 1px solid #242f40;
+      padding: 3px 9px;
+      border-radius: 6px;
+    }
+
+    .cred-cards-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .cred-card {
+      background: #11161f;
+      border: 1px solid #1d2636;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      position: relative;
+      transition: border-color 0.12s ease;
+    }
+    .cred-card:hover {
+      border-color: #27344a;
+    }
+    .cred-card-left-bar {
+      width: 4px;
+      flex-shrink: 0;
+    }
+    .cred-card-body {
+      padding: 16px 18px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+    .cred-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .cred-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .cred-type-badge {
+      font-family: monospace;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #f8fafc;
+      background: #1b2332;
+      border: 1px solid #2a374d;
+      padding: 2px 8px;
+      border-radius: 5px;
+    }
+    .cred-location-badge {
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 5px;
+      background: #161e2a;
+      border: 1px solid #222d3d;
+      color: #94a3b8;
+    }
+    .cred-location-badge.loc-tracked { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); }
+    .cred-location-badge.loc-history { color: #a78bfa; border-color: rgba(167, 139, 250, 0.3); }
+    .cred-location-badge.loc-local { color: #fb923c; border-color: rgba(251, 146, 60, 0.3); }
+    .cred-location-badge.loc-git-remote { color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
+
+    .cred-file-link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #141b26;
+      border: 1px solid #202b3c;
+      color: #94a3b8;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cred-file-link-btn:hover {
+      background: #182232;
+      border-color: #38bdf8;
+      color: #f1f5f9;
+    }
+    .commit-pill, .branch-pill {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .cred-desc {
+      font-size: 12px;
+      color: var(--text2);
+      line-height: 1.45;
+    }
+    .cred-value-box {
+      background: #0a0d13;
+      border: 1px solid #1a2230;
+      border-radius: 7px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .cred-value-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    .cred-value-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #64748b;
+      letter-spacing: 0.05em;
+    }
+    .cred-value-code {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #f87171;
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.2);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .cred-fp-badge {
+      font-family: monospace;
+      font-size: 10.5px;
+      color: #64748b;
+      background: #141b25;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #1f2a3a;
+    }
+    .cred-value-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cred-copy-btn, .cred-remediation-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #151b26;
+      color: #94a3b8;
+      border: 1px solid #202c3e;
+      padding: 4px 9px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    .cred-copy-btn:hover, .cred-remediation-btn:hover {
+      background: #1a2332;
+      color: #f1f5f9;
+      border-color: #38bdf8;
+    }
+    .cred-snippet-wrap {
+      background: #0d1117;
+      border: 1px solid #1d2534;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .cred-snippet-header {
+      background: #131924;
+      padding: 4px 10px;
+      border-bottom: 1px solid #1d2534;
+    }
+    .snippet-tag {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+    }
+    .cred-snippet-pre {
+      padding: 8px 12px;
+      font-family: monospace;
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: #cbd5e1;
+      overflow-x: auto;
+    }
+
+    .cred-remediation-drawer {
+      background: #0d131d;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 7px;
+      padding: 12px 16px;
+      margin-top: 4px;
+    }
+    .remediation-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .remediation-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .remediation-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+    .remediation-link {
+      font-size: 11px;
+      font-weight: 600;
+      color: #38bdf8;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .remediation-steps {
+      padding-left: 20px;
+      font-size: 11.5px;
+      color: #94a3b8;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .cred-incident-card {
+      background: #11151d;
+      border: 1px solid #232c3d;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-top: 20px;
+      margin-bottom: 16px;
+    }
+    .incident-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .incident-card-header h4 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f87171;
+    }
+    .incident-card-content p {
+      font-size: 11.5px;
+      color: #94a3b8;
+      line-height: 1.5;
+      margin-bottom: 6px;
+    }
+    .incident-code {
+      background: #090c12;
+      border: 1px solid #1a2230;
+      border-radius: 5px;
+      padding: 6px 10px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #38bdf8;
+      margin-bottom: 8px;
+      overflow-x: auto;
+    }
+
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: var(--bg2); }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
@@ -1851,6 +2659,11 @@ export function buildReportHtml(
         <span class="nav-tab-icon">🧩</span>
         <span class="nav-tab-title">Extension Scan</span>
         ${tab2Badge}
+      </button>
+      <button class="nav-tab-btn ${initialTab === 'credential-scan' ? 'active' : ''}" id="tab-btn-credential-scan" data-tab="credential-scan" onclick="switchTab('credential-scan')">
+        <span class="nav-tab-icon">🔐</span>
+        <span class="nav-tab-title">Credential Scan</span>
+        ${tab3Badge}
       </button>
     </div>
   </div>
@@ -1917,7 +2730,7 @@ export function buildReportHtml(
 
   ${buildSafeRulesPanel(result.safeRules)}
 
-  <div class="branches-section">
+  <div class="branches-section" id="glassworm-branches-section">
     <div class="branches-toolbar">
       <div class="branches-toolbar-left">
         <span class="branches-toolbar-title">Branches</span>
@@ -1985,7 +2798,7 @@ export function buildReportHtml(
   </div>
 
   <div class="footer">
-    <span class="footer-badge">Guardian v${result.version || '1.4.0'}</span>
+    <span class="footer-badge">Guardian v${version}</span>
     <span class="footer-dot">·</span>
     Scanned ${result.branches.length} branch${result.branches.length !== 1 ? 'es' : ''}
     <span class="footer-dot">·</span>
@@ -2030,11 +2843,91 @@ export function buildReportHtml(
   ${buildAuditSection(result.extensionAudit)}
 
   <div class="footer">
-    <span class="footer-badge">Guardian v${result.version || '1.4.0'}</span>
+    <span class="footer-badge">Guardian v${version}</span>
     <span class="footer-dot">·</span>
     Extension Supply-Chain Defense
     <span class="footer-dot">·</span>
     418+ Known Malware IDs &amp; Invisible Unicode Payload Engine
+  </div>
+</div>
+
+<div id="tab-credential-scan" class="tab-pane ${initialTab === 'credential-scan' ? 'active' : ''}">
+  <div class="stat-tabs">
+    <div class="stat-tab">
+      <div class="stat-tab-val ${credCritical > 0 ? 'c-red' : credAudit ? 'c-green' : 'c-muted'}" id="cred-stat-total">${credAudit ? credTotal : '—'}</div>
+      <div class="stat-tab-lbl">Total Findings</div>
+    </div>
+    <div class="stat-tab">
+      <div class="stat-tab-val ${credCritical > 0 ? 'c-red' : 'c-muted'}" id="cred-stat-critical">${credAudit ? credCritical : '—'}</div>
+      <div class="stat-tab-lbl">Critical Secrets</div>
+    </div>
+    <div class="stat-tab">
+      <div class="stat-tab-val ${credReview > 0 ? 'c-orange' : 'c-muted'}" id="cred-stat-review">${credAudit ? credReview : '—'}</div>
+      <div class="stat-tab-lbl">Review Needed</div>
+    </div>
+    <div class="stat-tab">
+      <div class="stat-tab-val ${credTracked > 0 ? 'c-blue' : 'c-muted'}" id="cred-stat-tracked">${credAudit ? credTracked : '—'}</div>
+      <div class="stat-tab-lbl">Tracked in Git</div>
+    </div>
+    <div class="stat-tab">
+      <div class="stat-tab-val ${credHistory > 0 ? 'c-purple' : 'c-muted'}" id="cred-stat-history">${credAudit ? credHistory : '—'}</div>
+      <div class="stat-tab-lbl">In Git History</div>
+    </div>
+    <div class="stat-tab">
+      <div class="stat-tab-val ${credLocal > 0 ? 'c-orange' : 'c-muted'}" id="cred-stat-local">${credAudit ? credLocal : '—'}</div>
+      <div class="stat-tab-lbl">Local / .env Files</div>
+    </div>
+    <div class="stat-tab">
+      <div class="stat-tab-val ${credRemotes > 0 ? 'c-red' : 'c-muted'}" id="cred-stat-remotes">${credAudit ? credRemotes : '—'}</div>
+      <div class="stat-tab-lbl">Git Remotes</div>
+    </div>
+    <div class="stat-tab">
+      <div class="stat-tab-val c-muted" id="cred-stat-time">${credAudit ? credAudit.scanDurationMs + 'ms' : '—'}</div>
+      <div class="stat-tab-lbl">Scan Time</div>
+    </div>
+  </div>
+
+  <div class="console-wrapper" id="cred-progress-console" style="display:none; margin-top: 14px; margin-bottom: 14px;">
+    <div class="console-header">
+      <div class="console-header-left">
+        <div class="console-dots">
+          <span class="console-dot dot-red"></span>
+          <span class="console-dot dot-yellow"></span>
+          <span class="console-dot dot-green"></span>
+        </div>
+        <span class="console-title" id="cred-console-title">Guardian Secret Scanner Engine</span>
+      </div>
+      <div class="console-status" id="cred-console-status">
+        <span class="pulse-dot"></span>
+        <span id="cred-status-text">SCANNING...</span>
+      </div>
+    </div>
+    <div class="console-body" id="cred-console-body">
+      <div class="console-log-line">
+        <span class="log-prompt">&gt;</span>
+        <span class="log-active" id="cred-console-log">Initializing privacy-preserving credential scan...</span>
+        <span class="console-cursor">_</span>
+      </div>
+      <div class="console-progress-container">
+        <div class="console-progress-track">
+          <div class="console-progress-bar" id="cred-progress-bar" style="width: 0%;"></div>
+        </div>
+        <div class="console-progress-meta">
+          <span id="cred-progress-detail">Preparing scopes (tracked branch tips, commit diffs, .env)...</span>
+          <span class="console-pct" id="cred-console-pct">0%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  ${buildCredentialSection(result.credentialAudit)}
+
+  <div class="footer">
+    <span class="footer-badge">Guardian v${version}</span>
+    <span class="footer-dot">·</span>
+    Privacy-Preserving Secret &amp; Token Scanner
+    <span class="footer-dot">·</span>
+    17+ Token Families · Masked Redaction · Mode-0600 TSV Export
   </div>
 </div>
 
@@ -2044,7 +2937,7 @@ export function buildReportHtml(
   let currentActiveTab = '${initialTab}';
 
   function switchTab(tabId) {
-    if (!tabId || (tabId !== 'glassworm' && tabId !== 'extension-audit')) return;
+    if (!tabId || (tabId !== 'glassworm' && tabId !== 'extension-audit' && tabId !== 'credential-scan')) return;
     currentActiveTab = tabId;
 
     const btns = document.querySelectorAll('.nav-tab-btn');
@@ -2075,7 +2968,7 @@ export function buildReportHtml(
   // Restore saved active tab on load
   try {
     const savedState = vscode.getState();
-    if (savedState && savedState.activeTab && (savedState.activeTab === 'glassworm' || savedState.activeTab === 'extension-audit')) {
+    if (savedState && savedState.activeTab && (savedState.activeTab === 'glassworm' || savedState.activeTab === 'extension-audit' || savedState.activeTab === 'credential-scan')) {
       switchTab(savedState.activeTab);
     }
   } catch (e) {}
@@ -2247,7 +3140,66 @@ export function buildReportHtml(
   }
 
   function rescan() {
+    const heroBtn = document.querySelector('.hero-rescan-btn');
+    if (heroBtn) {
+      heroBtn.classList.add('is-scanning');
+      heroBtn.disabled = true;
+    }
+
+    const branchesSec = document.getElementById('glassworm-branches-section');
+    if (branchesSec) {
+      branchesSec.innerHTML = 
+        '<div class="scanner-console" id="gw-scanner-console">' +
+          '<div class="console-header">' +
+            '<div class="console-dots">' +
+              '<span class="console-dot dot-red"></span>' +
+              '<span class="console-dot dot-yellow"></span>' +
+              '<span class="console-dot dot-green"></span>' +
+            '</div>' +
+            '<div class="console-title">Guardian Glassworm &amp; Git Branch Scanner</div>' +
+            '<div class="console-status"><span class="pulse-dot"></span> RUNNING SCAN</div>' +
+          '</div>' +
+          '<div class="console-body">' +
+            '<div class="console-log-line log-info"><span class="log-prompt">&gt;</span> Initializing Glassworm security &amp; malware inspection engine...</div>' +
+            '<div class="console-log-line log-info"><span class="log-prompt">&gt;</span> Checking local working tree, tasks.json, settings, and tracked branches...</div>' +
+            '<div class="console-log-line log-active" id="gw-console-live-line">' +
+              '<span class="log-prompt">&gt;</span> [SCANNING] <span class="console-cursor-text" id="gw-console-curr-text">Fetching latest remote branches from origin...</span><span class="console-cursor">█</span>' +
+            '</div>' +
+            '<div class="console-progress-container">' +
+              '<div class="console-progress-track">' +
+                '<div class="console-progress-bar" id="gw-scanner-progress-fill" style="width: 15%"></div>' +
+              '</div>' +
+              '<div class="console-progress-meta">' +
+                '<span id="gw-scanner-ticker">Fetching branch metadata...</span>' +
+                '<span class="console-pct" id="gw-console-pct">15%</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
     vscode.postMessage({ action: 'rescan' });
+  }
+
+  function updateGlasswormScanProgress(progress) {
+    const liveText = document.getElementById('gw-console-curr-text');
+    const ticker = document.getElementById('gw-scanner-ticker');
+    const fill = document.getElementById('gw-scanner-progress-fill');
+    const pctEl = document.getElementById('gw-console-pct');
+
+    const pct = progress.percent || 20;
+    if (liveText && progress.message) {
+      liveText.textContent = progress.message;
+    }
+    if (ticker && progress.message) {
+      ticker.textContent = progress.message;
+    }
+    if (fill) {
+      fill.style.width = pct + '%';
+    }
+    if (pctEl) {
+      pctEl.textContent = pct + '%';
+    }
   }
 
   function reloadWindow() {
@@ -2337,12 +3289,12 @@ export function buildReportHtml(
                 '<span class="console-dot dot-yellow"></span>' +
                 '<span class="console-dot dot-green"></span>' +
               '</div>' +
-              '<div class="console-title">guardian@security: ~ /scan-extensions --deep --signatures=418+</div>' +
+              '<div class="console-title">Extension Malware &amp; Supply-Chain Scanner</div>' +
               '<div class="console-status"><span class="pulse-dot"></span> RUNNING SCAN</div>' +
             '</div>' +
             '<div class="console-body">' +
-              '<div class="console-log-line log-info"><span class="log-prompt">&gt;</span> [GUARDIAN-CORE] Initializing Extension Supply-Chain &amp; Malware Engine v1.4.0...</div>' +
-              '<div class="console-log-line log-info"><span class="log-prompt">&gt;</span> [THREAT-DB] Loaded 418+ signatures (GlassWorm, ForceMemo, Sleeper-73).</div>' +
+              '<div class="console-log-line log-info"><span class="log-prompt">&gt;</span> Initializing Extension Security &amp; Malware Engine...</div>' +
+              '<div class="console-log-line log-info"><span class="log-prompt">&gt;</span> Loaded 418+ known threat signatures.</div>' +
               '<div class="console-log-line log-active" id="console-live-line">' +
                 '<span class="log-prompt">&gt;</span> [SCANNING] <span class="console-cursor-text" id="console-curr-text">Discovering installed extensions...</span><span class="console-cursor">█</span>' +
               '</div>' +
@@ -2929,10 +3881,441 @@ export function buildReportHtml(
     }
   }
 
+  let lastCredentialReport = ${JSON.stringify(result.credentialAudit || null)};
+  let currentCredFilter = 'all';
+  let currentCredLocation = 'all';
+  let currentCredSearchQuery = '';
+
+  function triggerCredentialScan() {
+    const tracked = document.getElementById('cred-opt-tracked')?.checked ?? true;
+    const history = document.getElementById('cred-opt-history')?.checked ?? false;
+    const local = document.getElementById('cred-opt-local')?.checked ?? true;
+    const remotes = document.getElementById('cred-opt-remotes')?.checked ?? true;
+    const orgsVal = document.getElementById('cred-opt-orgs')?.value?.trim();
+    const githubOrgs = orgsVal ? orgsVal.split(/[,;\s]+/).filter(Boolean) : [];
+
+    const options = {
+      scanTracked: tracked,
+      scanHistory: history,
+      scanLocal: local,
+      scanRemotes: remotes,
+      githubOrgs: githubOrgs.length > 0 ? githubOrgs : undefined,
+    };
+
+    const consoleWrap = document.getElementById('cred-progress-console');
+    if (consoleWrap) {
+      consoleWrap.style.display = 'block';
+      const logEl = document.getElementById('cred-console-log');
+      if (logEl) logEl.textContent = 'Starting credential & secret scan...';
+      const bar = document.getElementById('cred-progress-bar');
+      if (bar) bar.style.width = '5%';
+      const pct = document.getElementById('cred-console-pct');
+      if (pct) pct.textContent = '5%';
+      const stat = document.getElementById('cred-status-text');
+      if (stat) stat.textContent = 'SCANNING...';
+    }
+
+    const startBtn = document.getElementById('btn-cred-start');
+    if (startBtn) {
+      startBtn.disabled = true;
+      startBtn.innerHTML = '<span class="btn-icon">⏳</span> Scanning Secrets...';
+    }
+
+    vscode.postMessage({ action: 'startCredentialScan', options });
+  }
+
+  function updateCredentialScanProgress(progress) {
+    if (!progress) return;
+    const consoleWrap = document.getElementById('cred-progress-console');
+    if (consoleWrap) consoleWrap.style.display = 'block';
+
+    const pctVal = progress.totalSteps > 0 ? Math.round((progress.currentStep / progress.totalSteps) * 100) : 50;
+    const bar = document.getElementById('cred-progress-bar');
+    if (bar) bar.style.width = pctVal + '%';
+
+    const pct = document.getElementById('cred-console-pct');
+    if (pct) pct.textContent = pctVal + '%';
+
+    const title = document.getElementById('cred-console-title');
+    if (title && progress.phase) title.textContent = 'Phase: ' + progress.phase;
+
+    const logEl = document.getElementById('cred-console-log');
+    if (logEl && progress.message) logEl.textContent = progress.message;
+
+    const detail = document.getElementById('cred-progress-detail');
+    if (detail && progress.phase) {
+      detail.textContent = progress.phase + ' (' + progress.currentStep + '/' + progress.totalSteps + ' steps) · ' + progress.findingsCount + ' secret(s) found so far';
+    }
+  }
+
+  function renderCredentialScanResults(report) {
+    if (!report) return;
+    lastCredentialReport = report;
+
+    // Reset console
+    const consoleWrap = document.getElementById('cred-progress-console');
+    if (consoleWrap) {
+      const bar = document.getElementById('cred-progress-bar');
+      if (bar) bar.style.width = '100%';
+      const pct = document.getElementById('cred-console-pct');
+      if (pct) pct.textContent = '100%';
+      const stat = document.getElementById('cred-status-text');
+      if (stat) stat.textContent = 'COMPLETE';
+      const logEl = document.getElementById('cred-console-log');
+      if (logEl) logEl.textContent = 'Scan complete: ' + report.totalFindings + ' finding(s) detected in ' + report.scanDurationMs + 'ms';
+      setTimeout(() => {
+        consoleWrap.style.display = 'none';
+      }, 1800);
+    }
+
+    const startBtn = document.getElementById('btn-cred-start');
+    if (startBtn) {
+      startBtn.disabled = false;
+      startBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Re-Run Secret Scan';
+    }
+
+    // Update stat tab values
+    const sTotal = document.getElementById('cred-stat-total');
+    if (sTotal) {
+      sTotal.textContent = report.totalFindings;
+      sTotal.className = 'stat-tab-val ' + (report.criticalCount > 0 ? 'c-red' : report.totalFindings > 0 ? 'c-yellow' : 'c-green');
+    }
+    const sCrit = document.getElementById('cred-stat-critical');
+    if (sCrit) {
+      sCrit.textContent = report.criticalCount;
+      sCrit.className = 'stat-tab-val ' + (report.criticalCount > 0 ? 'c-red' : 'c-muted');
+    }
+    const sRev = document.getElementById('cred-stat-review');
+    if (sRev) {
+      sRev.textContent = report.reviewCount;
+      sRev.className = 'stat-tab-val ' + (report.reviewCount > 0 ? 'c-orange' : 'c-muted');
+    }
+    const sTracked = document.getElementById('cred-stat-tracked');
+    if (sTracked) {
+      sTracked.textContent = report.trackedCount;
+      sTracked.className = 'stat-tab-val ' + (report.trackedCount > 0 ? 'c-blue' : 'c-muted');
+    }
+    const sHist = document.getElementById('cred-stat-history');
+    if (sHist) {
+      sHist.textContent = report.historyCount;
+      sHist.className = 'stat-tab-val ' + (report.historyCount > 0 ? 'c-purple' : 'c-muted');
+    }
+    const sLoc = document.getElementById('cred-stat-local');
+    if (sLoc) {
+      sLoc.textContent = report.localCount;
+      sLoc.className = 'stat-tab-val ' + (report.localCount > 0 ? 'c-orange' : 'c-muted');
+    }
+    const sRem = document.getElementById('cred-stat-remotes');
+    if (sRem) {
+      sRem.textContent = report.remotesCount;
+      sRem.className = 'stat-tab-val ' + (report.remotesCount > 0 ? 'c-red' : 'c-muted');
+    }
+    const sTime = document.getElementById('cred-stat-time');
+    if (sTime) {
+      sTime.textContent = report.scanDurationMs + 'ms';
+    }
+
+    // Update Tab 3 navigation badge
+    const badge = document.getElementById('nav-tab-cred-badge');
+    if (badge) {
+      if (report.criticalCount > 0) {
+        badge.className = 'nav-tab-status status-danger';
+        badge.textContent = '🔴 ' + report.criticalCount;
+        badge.title = report.criticalCount + ' critical secret(s)';
+      } else {
+        badge.className = 'nav-tab-status status-clean';
+        badge.textContent = '✓';
+        badge.title = 'No critical secrets detected';
+      }
+    }
+
+    // Update summary banner
+    const banner = document.getElementById('cred-summary-banner');
+    if (banner) {
+      if (report.criticalCount > 0) {
+        banner.className = 'summary-hero danger';
+        banner.innerHTML =
+          '<div class="hero-left">' +
+            '<div class="hero-icon">🚨</div>' +
+            '<div class="hero-text">' +
+              '<div class="hero-title">' + report.criticalCount + ' Critical Secret' + (report.criticalCount !== 1 ? 's' : '') + ' Exposed!</div>' +
+              '<div class="hero-sub">Exposed active credentials grant unauthorized access. Revoke at the service provider immediately. Deleting files or commits does not revoke live keys.</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="hero-actions">' +
+            '<button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
+              'Re-Scan' +
+            '</button>' +
+          '</div>';
+      } else if (report.reviewCount > 0) {
+        banner.className = 'summary-hero warn';
+        banner.innerHTML =
+          '<div class="hero-left">' +
+            '<div class="hero-icon">⚠️</div>' +
+            '<div class="hero-text">' +
+              '<div class="hero-title">' + report.reviewCount + ' Credential' + (report.reviewCount !== 1 ? 's' : '') + ' Require Review</div>' +
+              '<div class="hero-sub">Found keys (e.g. Google API Keys) that may be public or unrestricted. Verify key restrictions in Cloud Console.</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="hero-actions">' +
+            '<button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
+              'Re-Scan' +
+            '</button>' +
+          '</div>';
+      } else {
+        banner.className = 'summary-hero ok';
+        banner.innerHTML =
+          '<div class="hero-left">' +
+            '<div class="hero-check-circle">✓</div>' +
+            '<div class="hero-text">' +
+              '<div class="hero-title">No exposed credentials or secrets detected</div>' +
+              '<div class="hero-sub">Scanned workspace coverage — no token-shaped keys, private keys, or exposed credentials found.</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="hero-actions">' +
+            '<button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
+              'Re-Scan' +
+            '</button>' +
+          '</div>';
+      }
+    }
+
+    // Re-render card DOM
+    const listEl = document.getElementById('cred-cards-list');
+    if (listEl) {
+      let cardsHtml = '';
+      (report.findings || []).forEach((t, idx) => {
+        const isCrit = t.severity === 'critical';
+        const isRev = t.severity === 'review';
+        const isSafe = !!t.isSafe;
+        const sevColor = isSafe ? 'var(--green)' : isCrit ? 'var(--red)' : isRev ? 'var(--yellow)' : 'var(--blue)';
+        const sevBg = isSafe ? 'var(--bg-green-soft)' : isCrit ? 'var(--bg-red-soft)' : isRev ? 'var(--bg-yellow-soft)' : 'var(--bg3)';
+        const sevBorder = isSafe ? 'rgba(74, 222, 128, 0.3)' : isCrit ? 'var(--border-red)' : isRev ? 'var(--border-yellow)' : 'var(--border)';
+        const sevText = isSafe ? 'SAFE' : isCrit ? 'CRITICAL SECRET' : isRev ? 'REVIEW REQUIRED' : 'INFO';
+        const drawerId = 'cred-drawer-cred-' + idx;
+        const drawerBtnId = 'cred-btn-drawer-cred-' + idx;
+
+        cardsHtml +=
+          '<div class="cred-card ' + (isSafe ? 'is-safe' : isCrit ? 'is-critical' : 'is-review') + '" id="cred-card-cred-' + idx + '" data-sev="' + escHtmlClient(t.severity) + '" data-safe="' + (isSafe ? 'true' : 'false') + '" data-location="' + escHtmlClient(t.locationType) + '" data-search="' + escHtmlClient(((t.ruleName || '') + ' ' + (t.file || '') + ' ' + (t.commit || '') + ' ' + (t.branch || '') + ' ' + (t.redactedValue || '') + ' ' + (t.fingerprint || '')).toLowerCase()) + '">' +
+            '<div class="cred-card-left-bar" style="background:' + sevColor + '"></div>' +
+            '<div class="cred-card-body">' +
+              '<div class="cred-card-header">' +
+                '<div class="cred-header-left">' +
+                  '<span class="sev-pill" style="background:' + sevBg + ';color:' + sevColor + ';border:1px solid ' + sevBorder + '">' + sevText + '</span>' +
+                  '<span class="cred-type-badge">' + escHtmlClient(t.ruleName) + '</span>' +
+                  '<span class="cred-location-badge loc-' + escHtmlClient(t.locationType) + '">' + credentialLocationLabelClient(t.locationType) + '</span>' +
+                '</div>' +
+                '<div class="cred-header-right">' +
+                  '<button class="cred-file-link-btn" data-file="' + escHtmlClient(t.file) + '" data-line="' + (t.line || 1) + '" data-location-type="' + escHtmlClient(t.locationType) + '" data-branch-commit="' + escHtmlClient(t.commit || t.branch || '') + '" onclick="openCredentialLocationBtn(this)" title="Open file in editor">' +
+                    '<span class="file-icon">📄</span>' +
+                    '<span class="file-name">' + escHtmlClient(t.file) + (t.line ? ':' + t.line : '') + '</span>' +
+                    (t.commit ? '<span class="commit-pill">commit: ' + escHtmlClient(t.commit) + '</span>' : '') +
+                    (t.branch ? '<span class="branch-pill">' + escHtmlClient(t.branch) + '</span>' : '') +
+                  '</button>' +
+                '</div>' +
+              '</div>' +
+              '<div class="cred-desc">' + escHtmlClient(t.description) + '</div>' +
+              '<div class="cred-value-box">' +
+                '<div class="cred-value-left">' +
+                  '<span class="cred-value-label">MATCHED VALUE:</span>' +
+                  '<code class="cred-value-code">' + escHtmlClient(t.redactedValue) + '</code>' +
+                  '<span class="cred-fp-badge" title="SHA-256 Fingerprint">' + escHtmlClient(t.fingerprint) + '</span>' +
+                '</div>' +
+                '<div class="cred-value-actions">' +
+                  '<button class="cred-copy-btn" data-value="' + escHtmlClient(t.redactedValue) + '" onclick="copyRedactedBtn(this)" title="Copy Redacted Value"><span class="btn-icon">📋</span> Copy Masked</button>' +
+                  '<button class="cred-copy-btn" data-value="' + escHtmlClient(t.fingerprint) + '" onclick="copyFingerprintBtn(this)" title="Copy SHA-256 Fingerprint"><span class="btn-icon">🔑</span> Copy SHA-256</button>' +
+                  '<button class="cred-remediation-btn" id="' + drawerBtnId + '" data-drawer="' + drawerId + '" onclick="toggleRemediationDrawerBtn(this)"><span class="btn-icon">🛠️</span> Remediation Steps ▾</button>' +
+                '</div>' +
+              '</div>' +
+              (t.snippet ? '<div class="cred-snippet-wrap"><div class="cred-snippet-header"><span class="snippet-tag">Context Snippet</span></div><pre class="cred-snippet-pre">' + escHtmlClient(t.snippet) + '</pre></div>' : '') +
+              '<div class="cred-remediation-drawer" id="' + drawerId + '" style="display:none;">' +
+                '<div class="remediation-inner">' +
+                  '<div class="remediation-header">' +
+                    '<span class="remediation-icon">🛡️</span>' +
+                    '<span class="remediation-title">' + escHtmlClient(t.remediation ? t.remediation.title : 'Remediation Steps') + '</span>' +
+                    (t.remediation && t.remediation.docUrl ? '<a href="' + escHtmlClient(t.remediation.docUrl) + '" target="_blank" class="remediation-link">Official Revocation Portal ↗</a>' : '') +
+                  '</div>' +
+                  '<ol class="remediation-steps">' +
+                    ((t.remediation && t.remediation.steps) ? t.remediation.steps.map(s => '<li>' + escHtmlClient(s) + '</li>').join('') : '') +
+                  '</ol>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+      });
+
+      cardsHtml +=
+        '<div id="cred-filter-empty-state" class="ext-filter-empty-state" style="' + (report.totalFindings === 0 ? 'display:flex;' : 'display:none;') + '">' +
+          '<div class="empty-state-icon-box">' +
+            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>' +
+          '</div>' +
+          '<div class="empty-state-title" id="cred-empty-msg">No credentials match the selected filter.</div>' +
+          '<div class="empty-state-sub" id="cred-empty-sub">Try changing your severity, location, or search filters above.</div>' +
+          '<button class="ext-reset-btn" onclick="clearCredSearchAndFilter()">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>' +
+            'Reset Filters' +
+          '</button>' +
+        '</div>';
+
+      listEl.innerHTML = cardsHtml;
+    }
+
+    applyCredFilters();
+  }
+
+  function credentialLocationLabelClient(loc) {
+    switch (loc) {
+      case 'tracked': return '💻 Tracked in Git';
+      case 'history': return '📜 Git Commit History';
+      case 'local': return '📄 Local File (.env/disk)';
+      case 'git-remote': return '🌐 Git Remote (.git/config)';
+      case 'github-alert': return '☁️ GitHub Alert';
+      default: return loc || '';
+    }
+  }
+
+  function escHtmlClient(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function exportCredentialReport(format) {
+    vscode.postMessage({ action: 'exportCredentialReport', format: format || 'tsv' });
+  }
+
+  function openCredentialLocationBtn(btn) {
+    const file = btn.getAttribute('data-file') || '';
+    const line = parseInt(btn.getAttribute('data-line'), 10) || 1;
+    const locationType = btn.getAttribute('data-location-type') || '';
+    const branchOrCommit = btn.getAttribute('data-branch-commit') || '';
+    vscode.postMessage({
+      action: 'openCredentialLocation',
+      file: file,
+      line: line,
+      locationType: locationType,
+      branchOrCommit: branchOrCommit,
+    });
+  }
+
+  function copyRedactedBtn(btn) {
+    const text = btn.getAttribute('data-value') || '';
+    try {
+      navigator.clipboard.writeText(text);
+    } catch (_) {}
+    vscode.postMessage({ action: 'copyText', text: text });
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<span class="btn-icon">✓</span> Copied!';
+    setTimeout(() => { btn.innerHTML = orig; }, 1500);
+  }
+
+  function copyFingerprintBtn(btn) {
+    const text = btn.getAttribute('data-value') || '';
+    try {
+      navigator.clipboard.writeText(text);
+    } catch (_) {}
+    vscode.postMessage({ action: 'copyText', text: text });
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<span class="btn-icon">✓</span> Copied!';
+    setTimeout(() => { btn.innerHTML = orig; }, 1500);
+  }
+
+  function toggleRemediationDrawerBtn(btn) {
+    const drawerId = btn.getAttribute('data-drawer');
+    if (!drawerId) return;
+    const drawer = document.getElementById(drawerId);
+    if (!drawer) return;
+    const isHidden = drawer.style.display === 'none';
+    drawer.style.display = isHidden ? 'block' : 'none';
+    btn.innerHTML = isHidden
+      ? '<span class="btn-icon">🛠️</span> Hide Remediation ▴'
+      : '<span class="btn-icon">🛠️</span> Remediation Steps ▾';
+  }
+
+  function searchCredentials(query) {
+    currentCredSearchQuery = (query || '').toLowerCase().trim();
+    applyCredFilters();
+  }
+
+  function handleCredFilterClick(btn) {
+    if (!btn) return;
+    const group = btn.closest('.filter-group-buttons');
+    if (group) group.querySelectorAll('.filter-tag').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    currentCredFilter = btn.getAttribute('data-cred-filter') || 'all';
+    applyCredFilters();
+  }
+
+  function handleCredLocationFilterClick(btn) {
+    if (!btn) return;
+    const group = btn.closest('.filter-group-buttons');
+    if (group) group.querySelectorAll('.filter-tag').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    currentCredLocation = btn.getAttribute('data-cred-location') || 'all';
+    applyCredFilters();
+  }
+
+  function clearCredSearchAndFilter() {
+    currentCredFilter = 'all';
+    currentCredLocation = 'all';
+    currentCredSearchQuery = '';
+    const input = document.getElementById('cred-search-input');
+    if (input) input.value = '';
+    document.querySelectorAll('[data-cred-filter]').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-cred-filter') === 'all');
+    });
+    document.querySelectorAll('[data-cred-location]').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-cred-location') === 'all');
+    });
+    applyCredFilters();
+  }
+
+  function applyCredFilters() {
+    const cards = document.querySelectorAll('.cred-card');
+    let visibleCount = 0;
+
+    cards.forEach(card => {
+      const sev = card.getAttribute('data-sev');
+      const loc = card.getAttribute('data-location');
+      const search = card.getAttribute('data-search') || '';
+
+      const matchesSev = currentCredFilter === 'all' || sev === currentCredFilter;
+      const matchesLoc = currentCredLocation === 'all' || loc === currentCredLocation;
+      const matchesSearch = !currentCredSearchQuery || search.includes(currentCredSearchQuery);
+
+      if (matchesSev && matchesLoc && matchesSearch) {
+        card.style.display = 'flex';
+        visibleCount++;
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    const countEl = document.getElementById('cred-filter-count');
+    if (countEl) {
+      const total = cards.length;
+      countEl.textContent = 'Showing ' + visibleCount + ' of ' + total + ' findings';
+    }
+
+    const emptyState = document.getElementById('cred-filter-empty-state');
+    if (emptyState) {
+      emptyState.style.display = (visibleCount === 0 && cards.length > 0) ? 'flex' : (cards.length === 0 ? 'flex' : 'none');
+    }
+  }
+
   window.addEventListener('message', event => {
     const msg = event.data;
     if (!msg) return;
-    if (msg.action === 'extensionAuditProgress') {
+    if (msg.action === 'glasswormScanProgress') {
+      updateGlasswormScanProgress(msg.progress);
+    } else if (msg.action === 'extensionAuditProgress') {
       updateExtensionScanProgress(msg.progress);
     } else if (msg.action === 'extensionAuditComplete') {
       renderExtensionAuditResults(msg.report);
@@ -2940,6 +4323,12 @@ export function buildReportHtml(
       handleExtensionUninstalled(msg.id, msg.success, msg.message);
     } else if (msg.action === 'allMaliciousUninstalled') {
       handleAllMaliciousUninstalled(msg.results);
+    } else if (msg.action === 'credentialScanProgress') {
+      updateCredentialScanProgress(msg.progress);
+    } else if (msg.action === 'credentialScanComplete') {
+      renderCredentialScanResults(msg.report);
+    } else if (msg.action === 'switchTab') {
+      switchTab(msg.tab);
     }
   });
 </script>

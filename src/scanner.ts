@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { SafeRuleEntry, matchSafeRule } from './preferences';
 import { ExtensionAuditReport } from './extensionAuditor';
+import { CredentialScanReport } from './credentialScanner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,7 @@ export interface WorkspaceScanResult {
   version?: string;
   safeRules?: SafeRuleEntry[];
   extensionAudit?: ExtensionAuditReport;
+  credentialAudit?: CredentialScanReport;
 }
 
 export function getActiveThreats(threats: Threat[]): Threat[] {

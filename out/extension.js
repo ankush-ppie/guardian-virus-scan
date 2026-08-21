@@ -43,19 +43,21 @@ const scanner_1 = require("./scanner");
 const report_1 = require("./report");
 const preferences_1 = require("./preferences");
 const extensionAuditor_1 = require("./extensionAuditor");
+const credentialScanner_1 = require("./credentialScanner");
 let reportPanel;
 let latestResult;
 const virtualDocuments = new Map();
 // ─── Core: scan all branches in a workspace ───────────────────────────────────
-async function runFullScan(workspacePath, progress, token) {
+async function runFullScan(workspacePath, progress, token, onProgress) {
     const start = Date.now();
     if (!(0, scanner_1.isGitRepo)(workspacePath)) {
         throw new Error('Not a git repository.');
     }
     const config = vscode.workspace.getConfiguration('guardian');
     const shouldFetch = config.get('fetchRemotesBeforeScan', true);
-    if (shouldFetch && !token.isCancellationRequested && (0, scanner_1.hasRemotes)(workspacePath)) {
-        progress.report({ message: 'Fetching latest remote branches from origin...' });
+    if (shouldFetch && !token?.isCancellationRequested && (0, scanner_1.hasRemotes)(workspacePath)) {
+        progress?.report({ message: 'Fetching latest remote branches from origin...' });
+        onProgress?.({ message: 'Fetching latest remote branches from origin...', percent: 10 });
         try {
             (0, scanner_1.fetchRemoteRefs)(workspacePath);
         }
@@ -77,16 +79,21 @@ async function runFullScan(workspacePath, progress, token) {
     const detectFrom = branches.includes(currentBranch) ? currentBranch : branches[0];
     const projectType = (0, scanner_1.detectProjectType)(workspacePath, detectFrom);
     const results = [];
-    progress.report({ message: 'Scanning current working tree (including ignored/untracked security files)' });
+    progress?.report({ message: 'Scanning current working tree (including ignored/untracked security files)' });
+    onProgress?.({ message: 'Scanning current working tree (including ignored/untracked security files)', percent: 25 });
     results.push((0, scanner_1.scanWorkingTree)(workspacePath, currentBranch, projectType));
-    const step = refsToScan.length > 0 ? 100 / refsToScan.length : 100;
+    const step = refsToScan.length > 0 ? 70 / refsToScan.length : 70;
     for (let i = 0; i < refsToScan.length; i++) {
-        if (token.isCancellationRequested)
+        if (token?.isCancellationRequested)
             break;
         const branch = refsToScan[i];
-        progress.report({
+        progress?.report({
             message: `Scanning ref ${i + 1}/${refsToScan.length}: ${branch}`,
             increment: step,
+        });
+        onProgress?.({
+            message: `Scanning ref ${i + 1}/${refsToScan.length}: ${branch}`,
+            percent: 25 + Math.round(((i + 1) / refsToScan.length) * 70),
         });
         const result = (0, scanner_1.scanBranch)(workspacePath, branch, currentBranch, projectType);
         results.push(result);
@@ -144,26 +151,73 @@ async function openThreatFile(context, workspaceRoot, file, line, branch) {
         const range = new vscode.Range(targetLine, 0, targetLine, 999);
         editor.selection = new vscode.Selection(range.start, range.end);
         editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
-        // Show a clear notice — different message for tasks.json (highest risk file)
-        const isTasksFile = file.toLowerCase().includes('tasks.json');
-        if (isTasksFile) {
-            vscode.window.showWarningMessage(`🛡️ Guardian: Viewing "${file}" from branch "${branch}" (read-only). ` +
-                `This file contains auto-run tasks but is safe to view — it is NOT loaded as a workspace config.`);
-        }
-        else {
-            vscode.window.showInformationMessage(`🛡️ Guardian: Viewing "${file}" from branch "${branch}" (read-only). Your current branch is unchanged.`);
-        }
     }
     catch (e) {
         vscode.window.showErrorMessage(`Guardian: Could not read "${file}" from branch "${branch}" — ${e.message}`);
+    }
+}
+async function openCredentialFile(context, workspaceRoot, file, line = 1, locationType, branchOrCommit) {
+    const targetLine = Math.max(0, (line || 1) - 1);
+    try {
+        if (locationType === 'github-alert' && file.startsWith('http')) {
+            vscode.env.openExternal(vscode.Uri.parse(file));
+            return;
+        }
+        if (locationType === 'history' && branchOrCommit) {
+            const gitPath = file.replace(/\\/g, '/');
+            const raw = (0, child_process_1.execFileSync)('git', ['show', `${branchOrCommit}:${gitPath}`], {
+                cwd: workspaceRoot,
+                stdio: ['ignore', 'pipe', 'pipe'],
+                maxBuffer: 8 * 1024 * 1024,
+                windowsHide: true,
+            }).toString('utf8');
+            const scheme = 'guardian-branch';
+            const uri = vscode.Uri.parse(`${scheme}:/${encodeURIComponent(`commit-${branchOrCommit}`)}/${file.replace(/\\/g, '/')}`);
+            virtualDocuments.set(uri.toString(), raw);
+            const doc = await vscode.workspace.openTextDocument(uri);
+            const editor = await vscode.window.showTextDocument(doc, {
+                preview: false,
+                viewColumn: vscode.ViewColumn.Beside,
+            });
+            const range = new vscode.Range(targetLine, 0, targetLine, 999);
+            editor.selection = new vscode.Selection(range.start, range.end);
+            editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+            return;
+        }
+        if (locationType === 'tracked' && branchOrCommit) {
+            await openThreatFile(context, workspaceRoot, file, line, branchOrCommit);
+            return;
+        }
+        // Local file or .git/config
+        const root = path.resolve(workspaceRoot);
+        const target = path.resolve(root, file);
+        if (!fs.existsSync(target)) {
+            vscode.window.showWarningMessage(`Guardian: File "${file}" was not found on disk.`);
+            return;
+        }
+        const doc = await vscode.workspace.openTextDocument(target);
+        const editor = await vscode.window.showTextDocument(doc, {
+            preview: false,
+            viewColumn: vscode.ViewColumn.Beside,
+        });
+        const range = new vscode.Range(targetLine, 0, targetLine, 999);
+        editor.selection = new vscode.Selection(range.start, range.end);
+        editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+    }
+    catch (e) {
+        vscode.window.showErrorMessage(`Guardian: Could not open "${file}" — ${e.message}`);
     }
 }
 // ─── Show / refresh the report panel ─────────────────────────────────────────
 function showReport(result, context, initialTab = 'glassworm') {
     const activeInfectedCount = result.branches.filter(b => (0, scanner_1.getActiveThreats)(b.threats).length > 0).length;
     const extMaliciousCount = result.extensionAudit?.maliciousCount ?? 0;
+    const credCriticalCount = result.credentialAudit?.criticalCount ?? 0;
     let title = '🛡️ Guardian — All branches clean';
-    if (activeInfectedCount > 0 && extMaliciousCount > 0) {
+    if (credCriticalCount > 0) {
+        title = `🛡️ Guardian — ${credCriticalCount} critical secret(s) found`;
+    }
+    else if (activeInfectedCount > 0 && extMaliciousCount > 0) {
         title = `🛡️ Guardian — ${activeInfectedCount} infected branch(es), ${extMaliciousCount} malicious ext(s)`;
     }
     else if (activeInfectedCount > 0) {
@@ -187,7 +241,28 @@ function showReport(result, context, initialTab = 'glassworm') {
     // Register listener ONCE — reads latestResult so it's always fresh
     reportPanel.webview.onDidReceiveMessage(async (msg) => {
         if (msg.action === 'rescan') {
-            vscode.commands.executeCommand('guardian.scanAllBranches');
+            const folders = vscode.workspace.workspaceFolders;
+            const workspacePath = latestResult?.workspacePath || folders?.[0]?.uri.fsPath;
+            if (!workspacePath)
+                return;
+            updateStatusBar(latestResult, true);
+            try {
+                const rawResult = await runFullScan(workspacePath, undefined, undefined, (progress) => {
+                    reportPanel?.webview.postMessage({ action: 'glasswormScanProgress', progress });
+                });
+                const safeRules = (0, preferences_1.getAllSafeRules)(context.workspaceState, context.globalState);
+                const result = (0, scanner_1.applySafePreferences)(rawResult, safeRules);
+                latestResult = result;
+                updateStatusBar(result, false);
+                showReport(result, context, 'glassworm');
+            }
+            catch (e) {
+                updateStatusBar(latestResult, false);
+                reportPanel?.webview.postMessage({
+                    action: 'glasswormScanError',
+                    message: e.message || 'Scan failed',
+                });
+            }
             return;
         }
         if (msg.action === 'reloadWindow') {
@@ -211,7 +286,7 @@ function showReport(result, context, initialTab = 'glassworm') {
                 updateStatusBar(latestResult, false);
             }
             const scopeDesc = scope === 'global' ? 'all projects' : 'this project';
-            vscode.window.showInformationMessage(`🛡️ Guardian: "${rule}" marked as safe for ${scopeDesc}.`);
+            vscode.window.setStatusBarMessage(`🛡️ Guardian: "${rule}" marked as safe for ${scopeDesc}.`, 2500);
             return;
         }
         if (msg.action === 'markUnsafe') {
@@ -223,7 +298,7 @@ function showReport(result, context, initialTab = 'glassworm') {
                 showReport(latestResult, context);
                 updateStatusBar(latestResult, false);
             }
-            vscode.window.showInformationMessage(`🛡️ Guardian: "${rule}" marked as active/unsafe.`);
+            vscode.window.setStatusBarMessage(`🛡️ Guardian: "${rule}" marked as active/unsafe.`, 2500);
             return;
         }
         if (msg.action === 'openFile') {
@@ -240,23 +315,13 @@ function showReport(result, context, initialTab = 'glassworm') {
                 latestResult.extensionAudit = report;
             }
             reportPanel?.webview.postMessage({ action: 'extensionAuditComplete', report });
-            if (report.maliciousCount > 0) {
-                vscode.window.showErrorMessage(`🚨 Guardian: ${report.maliciousCount} malicious extension${report.maliciousCount !== 1 ? 's' : ''} detected! Review and remove them in the Guardian report.`, 'View Report').then(choice => {
-                    if (choice === 'View Report' && latestResult) {
-                        showReport(latestResult, context, 'extension-audit');
-                    }
-                });
-            }
-            else {
-                vscode.window.showInformationMessage(`🛡️ Guardian: All ${report.totalAudited} installed extensions are clean (${report.userCount} user-installed, ${report.builtinCount} built-in).`);
-            }
             return;
         }
         if (msg.action === 'uninstallExtension') {
             const { id, path } = msg;
             const result = await (0, extensionAuditor_1.uninstallExtension)(id, path);
             if (result.success) {
-                vscode.window.showInformationMessage(`🛡️ Guardian: Extension "${id}" uninstalled.`);
+                vscode.window.setStatusBarMessage(`🛡️ Guardian: Extension "${id}" uninstalled.`, 2500);
                 // Re-fetch extension audit fresh
                 const report = await (0, extensionAuditor_1.auditInstalledExtensions)((progress) => {
                     reportPanel?.webview.postMessage({ action: 'extensionAuditProgress', progress });
@@ -281,7 +346,7 @@ function showReport(result, context, initialTab = 'glassworm') {
             const { extensions } = msg;
             const results = await (0, extensionAuditor_1.uninstallAllMaliciousExtensions)(extensions || []);
             if (results.successful.length > 0) {
-                vscode.window.showInformationMessage(`🛡️ Guardian: Removed ${results.successful.length} malicious extension(s).`);
+                vscode.window.setStatusBarMessage(`🛡️ Guardian: Removed ${results.successful.length} malicious extension(s).`, 2500);
                 // Re-fetch extension audit fresh
                 const report = await (0, extensionAuditor_1.auditInstalledExtensions)((progress) => {
                     reportPanel?.webview.postMessage({ action: 'extensionAuditProgress', progress });
@@ -293,6 +358,66 @@ function showReport(result, context, initialTab = 'glassworm') {
             }
             if (results.failed.length > 0) {
                 vscode.window.showErrorMessage(`Guardian: Failed to automatically remove: ${results.failed.join(', ')}. Try running CLI uninstall commands.`);
+            }
+            return;
+        }
+        if (msg.action === 'startCredentialScan') {
+            const options = msg.options || {
+                scanTracked: true,
+                scanHistory: false,
+                scanLocal: true,
+                scanRemotes: true,
+            };
+            const workspacePath = latestResult?.workspacePath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!workspacePath) {
+                vscode.window.showErrorMessage('Guardian: No workspace folder open for credential scan.');
+                return;
+            }
+            const report = await (0, credentialScanner_1.runCredentialScan)(workspacePath, options, (progress) => {
+                reportPanel?.webview.postMessage({ action: 'credentialScanProgress', progress });
+            });
+            if (latestResult) {
+                latestResult.credentialAudit = report;
+            }
+            reportPanel?.webview.postMessage({ action: 'credentialScanComplete', report });
+            return;
+        }
+        if (msg.action === 'exportCredentialReport') {
+            const format = msg.format || 'tsv';
+            const report = latestResult?.credentialAudit;
+            if (!report) {
+                vscode.window.showWarningMessage('Guardian: No credential scan report to export. Please run a scan first.');
+                return;
+            }
+            let defaultName = 'guardian-credentials-report.tsv';
+            let filters = { 'TSV Document': ['tsv'], 'All Files': ['*'] };
+            let content = (0, credentialScanner_1.exportCredentialTsv)(report);
+            if (format === 'json') {
+                defaultName = 'guardian-credentials-report.json';
+                filters = { 'JSON Document': ['json'], 'All Files': ['*'] };
+                content = (0, credentialScanner_1.exportCredentialJson)(report);
+            }
+            else if (format === 'md') {
+                defaultName = 'guardian-credentials-report.md';
+                filters = { 'Markdown Document': ['md'], 'All Files': ['*'] };
+                content = (0, credentialScanner_1.exportCredentialMarkdown)(report);
+            }
+            const uri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.workspace.workspaceFolders?.[0]?.uri
+                    ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, defaultName)
+                    : undefined,
+                filters,
+            });
+            if (uri) {
+                fs.writeFileSync(uri.fsPath, content, { mode: 0o600 });
+                vscode.window.showInformationMessage(`🛡️ Guardian: Redacted credential report exported to ${path.basename(uri.fsPath)}`);
+            }
+            return;
+        }
+        if (msg.action === 'openCredentialLocation') {
+            const workspacePath = latestResult?.workspacePath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (workspacePath) {
+                await openCredentialFile(context, workspacePath, msg.file, msg.line, msg.locationType, msg.branchOrCommit);
             }
             return;
         }
@@ -339,59 +464,61 @@ function activate(context) {
     context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('guardian-branch', {
         provideTextDocumentContent: uri => virtualDocuments.get(uri.toString()) ?? '',
     }));
-    // Helper: run scan with progress UI
-    async function triggerScan(workspacePath) {
+    // ── Startup & Background Scanning ──────────────────────────────────────────
+    async function performStartupScan() {
+        const folders = vscode.workspace.workspaceFolders;
+        if (!folders?.length)
+            return;
         updateStatusBar(undefined, true);
-        await vscode.window.withProgress({
-            location: vscode.ProgressLocation.Notification,
-            title: '🛡️ Guardian: Scanning for Glassworm & threats...',
-            cancellable: true,
-        }, async (progress, token) => {
+        let totalActiveThreats = 0;
+        let hasValidScan = false;
+        for (const folder of folders) {
             try {
-                const rawResult = await runFullScan(workspacePath, progress, token);
-                if (token.isCancellationRequested) {
-                    updateStatusBar(latestResult, false);
-                    vscode.window.showInformationMessage('Guardian: Scan cancelled.');
-                    return;
-                }
+                const raw = await runFullScan(folder.uri.fsPath);
                 const safeRules = (0, preferences_1.getAllSafeRules)(context.workspaceState, context.globalState);
-                const result = (0, scanner_1.applySafePreferences)(rawResult, safeRules);
+                const result = (0, scanner_1.applySafePreferences)(raw, safeRules);
                 latestResult = result;
-                updateStatusBar(result, false);
-                showReport(result, context);
-                // Status bar notification if infected
-                const activeInfectedBranches = result.branches.filter(b => (0, scanner_1.getActiveThreats)(b.threats).length > 0);
-                if (activeInfectedBranches.length > 0) {
-                    const names = activeInfectedBranches.map(b => b.branch).join(', ');
-                    vscode.window.showWarningMessage(`🛡️ Guardian: ${activeInfectedBranches.length} infected branch${activeInfectedBranches.length !== 1 ? 'es' : ''} found: ${names}`, 'View Report').then(choice => {
-                        if (choice === 'View Report')
-                            showReport(result, context);
-                    });
+                hasValidScan = true;
+                const active = result.branches.reduce((acc, b) => acc + (0, scanner_1.getActiveThreats)(b.threats).length, 0);
+                totalActiveThreats += active;
+            }
+            catch {
+                // Quiet ignore for non-git folders
+            }
+        }
+        updateStatusBar(latestResult, false);
+        if (!hasValidScan)
+            return;
+        // If report panel was already open from a previous session, refresh it
+        if (reportPanel && latestResult) {
+            showReport(latestResult, context);
+        }
+        // Exactly 1 message for all workspaces on startup
+        if (totalActiveThreats > 0) {
+            vscode.window.showWarningMessage(`🚨 Guardian: ${totalActiveThreats} threat${totalActiveThreats !== 1 ? 's' : ''} detected across workspace.`, 'View Report').then(choice => {
+                if (choice === 'View Report' && latestResult) {
+                    showReport(latestResult, context);
                 }
-            }
-            catch (e) {
-                updateStatusBar(latestResult, false);
-                // Not a git repo — scan silently skipped (no error popup)
-                if (e.message?.includes('Not a git repository'))
-                    return;
-                vscode.window.showErrorMessage(`Guardian scan failed: ${e.message}`);
-            }
-        });
+            });
+        }
+        else {
+            vscode.window.showInformationMessage('🛡️ Guardian: Workspace scan complete — all clean.', 'View Report').then(choice => {
+                if (choice === 'View Report' && latestResult) {
+                    showReport(latestResult, context);
+                }
+            });
+        }
     }
-    // ── Auto-scan when a workspace folder is opened ───────────────────────────
-    // Trigger on already-open folders (VS Code launched with a folder)
+    // Trigger on startup (with small delay so VS Code UI finishes loading)
     if (vscode.workspace.workspaceFolders?.length) {
-        // Small delay so VS Code UI finishes loading before we pop up progress
         setTimeout(() => {
-            for (const folder of vscode.workspace.workspaceFolders) {
-                triggerScan(folder.uri.fsPath);
-            }
+            performStartupScan();
         }, 1500);
     }
-    // Trigger when a new folder is added to the workspace mid-session
+    // Trigger when a folder is added
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(event => {
-        for (const folder of event.added) {
-            triggerScan(folder.uri.fsPath);
+        if (event.added.length > 0) {
+            performStartupScan();
         }
     }));
     // ── Commands ─────────────────────────────────────────────────────────────
@@ -400,7 +527,24 @@ function activate(context) {
             showReport(latestResult, context);
         }
         else {
-            vscode.commands.executeCommand('guardian.scanAllBranches');
+            const folders = vscode.workspace.workspaceFolders;
+            if (folders?.length) {
+                try {
+                    updateStatusBar(undefined, true);
+                    const raw = await runFullScan(folders[0].uri.fsPath);
+                    const safeRules = (0, preferences_1.getAllSafeRules)(context.workspaceState, context.globalState);
+                    latestResult = (0, scanner_1.applySafePreferences)(raw, safeRules);
+                    updateStatusBar(latestResult, false);
+                    showReport(latestResult, context);
+                }
+                catch (e) {
+                    updateStatusBar(undefined, false);
+                    vscode.window.showErrorMessage(`Guardian scan failed: ${e.message}`);
+                }
+            }
+            else {
+                vscode.window.showInformationMessage('Guardian: No workspace folder open.');
+            }
         }
     }));
     context.subscriptions.push(vscode.commands.registerCommand('guardian.scanAllBranches', async () => {
@@ -409,34 +553,53 @@ function activate(context) {
             vscode.window.showInformationMessage('Guardian: No workspace folder open.');
             return;
         }
-        for (const folder of folders) {
-            await triggerScan(folder.uri.fsPath);
+        const workspacePath = folders[0].uri.fsPath;
+        updateStatusBar(latestResult, true);
+        try {
+            const rawResult = await runFullScan(workspacePath, undefined, undefined, (progress) => {
+                reportPanel?.webview.postMessage({ action: 'glasswormScanProgress', progress });
+            });
+            const safeRules = (0, preferences_1.getAllSafeRules)(context.workspaceState, context.globalState);
+            const result = (0, scanner_1.applySafePreferences)(rawResult, safeRules);
+            latestResult = result;
+            updateStatusBar(result, false);
+            showReport(result, context, 'glassworm');
+        }
+        catch (e) {
+            updateStatusBar(latestResult, false);
+            if (!e.message?.includes('Not a git repository')) {
+                vscode.window.showErrorMessage(`Guardian scan failed: ${e.message}`);
+            }
         }
     }));
     context.subscriptions.push(vscode.commands.registerCommand('guardian.auditExtensions', async () => {
         if (!latestResult) {
             const folders = vscode.workspace.workspaceFolders;
             if (folders?.length) {
-                await triggerScan(folders[0].uri.fsPath);
-                if (latestResult) {
-                    showReport(latestResult, context, 'extension-audit');
+                try {
+                    const raw = await runFullScan(folders[0].uri.fsPath);
+                    const safeRules = (0, preferences_1.getAllSafeRules)(context.workspaceState, context.globalState);
+                    latestResult = (0, scanner_1.applySafePreferences)(raw, safeRules);
+                }
+                catch {
+                    latestResult = {
+                        workspacePath: folders[0].uri.fsPath,
+                        projectType: 'generic',
+                        branches: [],
+                        scanDurationMs: 0,
+                    };
                 }
             }
             else {
-                const emptyResult = {
+                latestResult = {
                     workspacePath: 'Extension Supply-Chain Scan',
                     projectType: 'generic',
                     branches: [],
                     scanDurationMs: 0,
                 };
-                latestResult = emptyResult;
-                showReport(emptyResult, context, 'extension-audit');
             }
         }
-        else {
-            showReport(latestResult, context, 'extension-audit');
-        }
-        // Automatically trigger the audit progress
+        showReport(latestResult, context, 'extension-audit');
         const report = await (0, extensionAuditor_1.auditInstalledExtensions)((progress) => {
             reportPanel?.webview.postMessage({ action: 'extensionAuditProgress', progress });
         });
@@ -444,16 +607,43 @@ function activate(context) {
             latestResult.extensionAudit = report;
         }
         reportPanel?.webview.postMessage({ action: 'extensionAuditComplete', report });
-        if (report.maliciousCount > 0) {
-            vscode.window.showErrorMessage(`🚨 Guardian: ${report.maliciousCount} malicious extension${report.maliciousCount !== 1 ? 's' : ''} detected! Review and remove them in the Guardian report.`, 'View Report').then(choice => {
-                if (choice === 'View Report' && latestResult) {
-                    showReport(latestResult, context, 'extension-audit');
-                }
-            });
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('guardian.scanCredentials', async () => {
+        const folders = vscode.workspace.workspaceFolders;
+        if (!folders?.length) {
+            vscode.window.showInformationMessage('Guardian: No workspace folder open.');
+            return;
         }
-        else {
-            vscode.window.showInformationMessage(`🛡️ Guardian: All ${report.totalAudited} installed extensions are clean (${report.userCount} user-installed, ${report.builtinCount} built-in).`);
+        const workspacePath = folders[0].uri.fsPath;
+        if (!latestResult) {
+            try {
+                const raw = await runFullScan(workspacePath);
+                const safeRules = (0, preferences_1.getAllSafeRules)(context.workspaceState, context.globalState);
+                latestResult = (0, scanner_1.applySafePreferences)(raw, safeRules);
+            }
+            catch {
+                latestResult = {
+                    workspacePath,
+                    projectType: 'generic',
+                    branches: [],
+                    scanDurationMs: 0,
+                };
+            }
         }
+        showReport(latestResult, context, 'credential-scan');
+        const defaultOptions = {
+            scanTracked: true,
+            scanHistory: false,
+            scanLocal: true,
+            scanRemotes: true,
+        };
+        const report = await (0, credentialScanner_1.runCredentialScan)(workspacePath, defaultOptions, (progress) => {
+            reportPanel?.webview.postMessage({ action: 'credentialScanProgress', progress });
+        });
+        if (latestResult) {
+            latestResult.credentialAudit = report;
+        }
+        reportPanel?.webview.postMessage({ action: 'credentialScanComplete', report });
     }));
 }
 function deactivate() {
