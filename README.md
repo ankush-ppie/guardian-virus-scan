@@ -35,15 +35,15 @@ When you open an untrusted project or pull a branch, attackers exploit automated
 ## 🚀 Quick Start (Zero Configuration Required)
 
 1. **Auto-Scan on Open**: Guardian automatically runs a silent background scan whenever you open a project in VS Code.
-2. **2-Tab Interactive Dashboard**:
-   - **Tab 1: Glassworm & Security Report** — Git branch scans, threat breakdown matrix, whitelisted safe rules, and threat cards with quarantined code viewers.
-   - **Tab 2: Extension Audit** — Scan installed extensions against 418+ malicious signatures and invisible-Unicode heuristics with one-click removal.
+2. **Interactive Security Dashboard**:
+   - **Repo Scan** — Multi-branch Git scans, working-tree coverage, threat breakdown matrix, whitelisted safe rules, and quarantined code viewer.
+   - **Extension Scan** — Audits installed IDE extensions against 418+ malicious signatures, ForceMemo markers, and invisible-Unicode heuristics with 1-click removal.
 3. **Status Bar Access**: Look at the bottom status bar for the `🛡️ Guardian` shield indicator. Click it anytime to open the interactive security report.
 4. **Manual Commands**: Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and run:
    ```
    Guardian: Scan for Glassworm & Workspace Threats
    Guardian: Open Glassworm & Security Report
-   Guardian: Audit Installed Extensions for Malware
+   Guardian: Scan Installed Extensions for Malware
    ```
 5. **Interactive Remediation**: Inspect threat details, remove malicious extensions with 1-click **"Remove All"** or 1-by-1 uninstallation, view quarantined snippets in read-only virtual tabs, or whitelist internal rules with **Mark as Safe**.
 
@@ -51,16 +51,20 @@ When you open an untrusted project or pull a branch, attackers exploit automated
 
 ## 🛡️ Key Features
 
-* 📑 **2-Tab Security Dashboard**: Cleanly separated views for **Glassworm & Security Report** (Tab 1) and **Extension Audit** (Tab 2) with active status badges and state persistence.
-* 📦 **Supply-Chain Extension Auditor**: Audits all installed VS Code & editor extensions against a database of 418+ known malicious extension IDs and runs deep heuristic analysis (ForceMemo markers `lzcdrtfxyqiplpd`, invisible Unicode runs `U+FE00–U+FE0F`/`U+E0100–U+E01EF`, and decoder patterns).
-* 🗑️ **One-Click Extension Remediation**: Remove all detected malicious extensions at once or uninstall them 1-by-1 directly from the report view with CLI fallback commands.
+### 🪱 Repo Scan & Git Workspace Security
 * 🔍 **Multi-Branch & Ref Scanner**: Inspects all local branches and remote-tracking refs directly via safe Git object database reads with automatic non-blocking remote ref updates (`git fetch --all --prune`).
-* 🌳 **Working Tree & Untracked Coverage**: Detects ignored, untracked, and newly modified high-risk files in your active workspace.
-* 🔒 **Zero Workspace Disturbance**: Never checks out branches, never alters your working tree files or index, and never executes untrusted code.
+* 🌳 **Working Tree & Untracked Coverage**: Detects ignored, untracked, and newly modified high-risk files in your active workspace before they are committed or executed.
 * 🎯 **Incident-Tested Glassworm Signatures**: Specific pattern recognition for confirmed Glassworm loader variants, fake font payloads, and amend/force-push propagation helpers.
+* 🔒 **Zero Workspace Disturbance**: Never checks out branches, never alters your working tree files or index, and opens threats in sandboxed read-only virtual viewers (`guardian-branch:/`).
 * 🛡️ **False-Positive Whitelisting**: Mark benign custom rules as Safe for **This Project** or **All Projects** globally with instant UI reclassification.
-* ⚡ **Shell-Safe Execution**: Git commands use strict argument arrays, preventing crafted branch or commit names from becoming shell injections.
 * 📊 **Adaptive Project Detection**: Automatically optimizes threat rules for Flutter, Node.js, Next.js, Python, and Generic code repositories.
+
+### 📦 Extension Scan & Supply-Chain Defense
+* 🎯 **418+ Threat Database Signatures**: Audits installed extensions across VS Code, Antigravity IDE, Cursor, Windsurf, and Codium against known malware campaign IDs.
+* 🧬 **Deep Heuristic Analysis**: Inspects extension JavaScript bundles for ForceMemo wave markers (`lzcdrtfxyqiplpd`), invisible Unicode variation selectors (`U+FE00–U+FE0F`, `U+E0100–U+E01EF`), and proximity decoders.
+* 📡 **Live Radar Scanning Console**: Real-time visual scan progress with animated inspection ticker and instant threat alerts.
+* 🗑️ **One-Click Extension Remediation**: Remove all detected malicious extensions at once or uninstall them individually directly from the report view with cross-platform CLI support.
+* 🏷️ **Type Filters & Live Stats**: Quickly filter extensions by **User-Installed**, **Built-in**, **Infected**, or **Clean** with real-time statistics.
 
 ---
 
