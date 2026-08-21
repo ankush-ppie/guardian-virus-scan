@@ -566,7 +566,7 @@ async function uninstallExtension(extensionId, extensionPath) {
     if (uninstalled) {
         return {
             success: true,
-            message: `Extension "${extensionId}" has been uninstalled. Reload window to apply changes.`,
+            message: `Extension "${extensionId}" has been uninstalled.`,
         };
     }
     return {

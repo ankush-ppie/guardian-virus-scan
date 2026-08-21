@@ -644,7 +644,7 @@ export async function uninstallExtension(
   if (uninstalled) {
     return {
       success: true,
-      message: `Extension "${extensionId}" has been uninstalled. Reload window to apply changes.`,
+      message: `Extension "${extensionId}" has been uninstalled.`,
     };
   }
 

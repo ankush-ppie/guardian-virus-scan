@@ -303,23 +303,24 @@ function showReport(
       if (msg.action === 'uninstallExtension') {
         const { id, path } = msg;
         const result = await uninstallExtension(id, path);
-        reportPanel?.webview.postMessage({
-          action: 'extensionUninstalled',
-          id,
-          success: result.success,
-          message: result.message,
-        });
         if (result.success) {
-          vscode.window.showInformationMessage(
-            `🛡️ Guardian: Extension "${id}" uninstalled. Reload window to complete removal.`,
-            'Reload Window'
-          ).then(choice => {
-            if (choice === 'Reload Window') {
-              vscode.commands.executeCommand('workbench.action.reloadWindow');
-            }
+          vscode.window.showInformationMessage(`🛡️ Guardian: Extension "${id}" uninstalled.`);
+          // Re-fetch extension audit fresh
+          const report = await auditInstalledExtensions((progress) => {
+            reportPanel?.webview.postMessage({ action: 'extensionAuditProgress', progress });
           });
+          if (latestResult) {
+            latestResult.extensionAudit = report;
+          }
+          reportPanel?.webview.postMessage({ action: 'extensionAuditComplete', report });
         } else {
           vscode.window.showErrorMessage(result.message);
+          reportPanel?.webview.postMessage({
+            action: 'extensionUninstalled',
+            id,
+            success: false,
+            message: result.message,
+          });
         }
         return;
       }
@@ -327,23 +328,20 @@ function showReport(
       if (msg.action === 'uninstallAllMalicious') {
         const { extensions } = msg;
         const results = await uninstallAllMaliciousExtensions(extensions || []);
-        reportPanel?.webview.postMessage({
-          action: 'allMaliciousUninstalled',
-          results,
-        });
         if (results.successful.length > 0) {
-          vscode.window.showInformationMessage(
-            `🛡️ Guardian: Removed ${results.successful.length} malicious extension(s). Reload window to apply changes.`,
-            'Reload Window'
-          ).then(choice => {
-            if (choice === 'Reload Window') {
-              vscode.commands.executeCommand('workbench.action.reloadWindow');
-            }
+          vscode.window.showInformationMessage(`🛡️ Guardian: Removed ${results.successful.length} malicious extension(s).`);
+          // Re-fetch extension audit fresh
+          const report = await auditInstalledExtensions((progress) => {
+            reportPanel?.webview.postMessage({ action: 'extensionAuditProgress', progress });
           });
+          if (latestResult) {
+            latestResult.extensionAudit = report;
+          }
+          reportPanel?.webview.postMessage({ action: 'extensionAuditComplete', report });
         }
         if (results.failed.length > 0) {
           vscode.window.showErrorMessage(
-            `Guardian: Failed to automatically remove: ${results.failed.join(', ')}. Try running 'code --uninstall-extension <id>' in terminal.`
+            `Guardian: Failed to automatically remove: ${results.failed.join(', ')}. Try running CLI uninstall commands.`
           );
         }
         return;

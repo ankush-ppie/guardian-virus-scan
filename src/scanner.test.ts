@@ -474,9 +474,9 @@ function testExtensionAuditor(): void {
         {
           id: 'ankushlokhande.guardian-virus-scan',
           displayName: 'Guardian — Glassworm & Malware Scanner',
-          version: '1.5.0',
+          version: '1.4.0',
           publisher: 'ankushlokhande',
-          extensionPath: '/mock/extensions/ankushlokhande.guardian-virus-scan-1.5.0',
+          extensionPath: '/mock/extensions/ankushlokhande.guardian-virus-scan-1.4.0',
           isBuiltin: false,
           status: 'clean',
           threats: [],

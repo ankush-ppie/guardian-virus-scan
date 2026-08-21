@@ -2341,7 +2341,7 @@ export function buildReportHtml(
               '<div class="console-status"><span class="pulse-dot"></span> RUNNING SCAN</div>' +
             '</div>' +
             '<div class="console-body">' +
-              '<div class="console-log-line log-info"><span class="log-prompt">&gt;</span> [GUARDIAN-CORE] Initializing Extension Supply-Chain &amp; Malware Engine v1.5.0...</div>' +
+              '<div class="console-log-line log-info"><span class="log-prompt">&gt;</span> [GUARDIAN-CORE] Initializing Extension Supply-Chain &amp; Malware Engine v1.4.0...</div>' +
               '<div class="console-log-line log-info"><span class="log-prompt">&gt;</span> [THREAT-DB] Loaded 418+ signatures (GlassWorm, ForceMemo, Sleeper-73).</div>' +
               '<div class="console-log-line log-active" id="console-live-line">' +
                 '<span class="log-prompt">&gt;</span> [SCANNING] <span class="console-cursor-text" id="console-curr-text">Discovering installed extensions...</span><span class="console-cursor">█</span>' +
@@ -2846,17 +2846,20 @@ export function buildReportHtml(
       if (remainingMalicious === 0) {
         const banner = document.getElementById('audit-summary-banner');
         if (banner) {
-          banner.className = 'audit-summary-banner clean';
+          banner.className = 'summary-hero ok';
           banner.innerHTML = 
-            '<div class="asb-left">' +
-              '<span class="asb-icon">✅</span>' +
-              '<div>' +
-                '<div class="asb-title">All Threats Removed — Reload Window</div>' +
-                '<div class="asb-sub">All malicious extensions have been uninstalled. Reload window to complete full removal.</div>' +
+            '<div class="hero-left">' +
+              '<div class="hero-check-circle">✓</div>' +
+              '<div class="hero-text">' +
+                '<div class="hero-title">All installed extensions are clean</div>' +
+                '<div class="hero-sub">Scanned ' + lastExtensionReport.totalAudited + ' extensions (' + (lastExtensionReport.userCount != null ? lastExtensionReport.userCount : '') + ' User · ' + (lastExtensionReport.builtinCount != null ? lastExtensionReport.builtinCount : '') + ' Built-in) — no malicious packages or supply-chain threats detected.</div>' +
               '</div>' +
             '</div>' +
-            '<div class="asb-actions">' +
-              '<button class="reload-link-btn" onclick="reloadWindow()" style="font-size:12px;padding:5px 12px;background:var(--vscode-button-background);color:#fff;border-radius:6px">Reload Window</button>' +
+            '<div class="hero-actions">' +
+              '<button class="hero-rescan-btn" onclick="triggerExtensionAudit()" title="Re-scan extensions">' +
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
+                'Re-Scan' +
+              '</button>' +
             '</div>';
         }
       }
@@ -2908,17 +2911,20 @@ export function buildReportHtml(
 
     const banner = document.getElementById('audit-summary-banner');
     if (banner) {
-      banner.className = 'audit-summary-banner clean';
+      banner.className = 'summary-hero ok';
       banner.innerHTML = 
-        '<div class="asb-left">' +
-          '<span class="asb-icon">✅</span>' +
-          '<div>' +
-            '<div class="asb-title">All Threats Removed — Reload Window</div>' +
-            '<div class="asb-sub">All malicious extensions have been uninstalled. Reload window to apply all changes.</div>' +
+        '<div class="hero-left">' +
+          '<div class="hero-check-circle">✓</div>' +
+          '<div class="hero-text">' +
+            '<div class="hero-title">All installed extensions are clean</div>' +
+            '<div class="hero-sub">Scanned ' + lastExtensionReport.totalAudited + ' extensions (' + (lastExtensionReport.userCount != null ? lastExtensionReport.userCount : '') + ' User · ' + (lastExtensionReport.builtinCount != null ? lastExtensionReport.builtinCount : '') + ' Built-in) — no malicious packages or supply-chain threats detected.</div>' +
           '</div>' +
         '</div>' +
-        '<div class="asb-actions">' +
-          '<button class="reload-link-btn" onclick="reloadWindow()" style="font-size:12px;padding:5px 12px;background:var(--vscode-button-background);color:#fff;border-radius:6px">Reload Window</button>' +
+        '<div class="hero-actions">' +
+          '<button class="hero-rescan-btn" onclick="triggerExtensionAudit()" title="Re-scan extensions">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
+            'Re-Scan' +
+          '</button>' +
         '</div>';
     }
   }
