@@ -291,6 +291,116 @@ export const CREDENTIAL_PATTERNS: CredentialPattern[] = [
     requiresEntropyCheck: true,
   },
   {
+    id: 'mapbox-secret-token',
+    name: 'Mapbox Secret / Downloads Token',
+    severity: 'critical',
+    regex: /sk\.(?:eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{10,}|[a-zA-Z0-9_-]{60,})/g,
+    description: 'Mapbox Secret Access Token or SDK Downloads Token with privileged administrative scopes.',
+    remediationTitle: 'Revoke & Rotate Mapbox Secret Token',
+    remediationSteps: [
+      'Sign in to Mapbox Account (account.mapbox.com) → Access tokens.',
+      'Delete or rotate the exposed secret token immediately.',
+      'Update backend environment variables and SDK download credentials.',
+      'Check token usage statistics for unexpected consumption.',
+    ],
+    docUrl: 'https://account.mapbox.com/access-tokens/',
+  },
+  {
+    id: 'mapbox-public-token',
+    name: 'Mapbox Public Access Token',
+    severity: 'review',
+    regex: /pk\.(?:eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{10,}|[a-zA-Z0-9_-]{60,})/g,
+    description: 'Mapbox Public Access Token for map rendering and geocoding services.',
+    remediationTitle: 'Configure URL Restrictions on Mapbox Public Token',
+    remediationSteps: [
+      'Open Mapbox Account (account.mapbox.com) → Access tokens.',
+      'Click the token and add URL / domain restrictions so only your authorized web or mobile applications can use it.',
+      'If compromised or receiving unauthorized traffic, delete and regenerate the token.',
+    ],
+    docUrl: 'https://account.mapbox.com/access-tokens/',
+  },
+  {
+    id: 'maptiler-key',
+    name: 'MapTiler API Key',
+    severity: 'review',
+    regex: /(?:maptiler[_-]?(?:api)?[_-]?key\s*[:=]\s*["']?|api\.maptiler\.com\/[^\s"']*key=)([A-Za-z0-9]{16,24})/gi,
+    description: 'MapTiler Map & Tile Cloud API Key.',
+    remediationTitle: 'Restrict or Rotate MapTiler Key',
+    remediationSteps: [
+      'Log into MapTiler Cloud (cloud.maptiler.com) → Account → Keys.',
+      'Configure Allowed HTTP Origins / Referrers to restrict usage to your domains.',
+      'Regenerate the key if exposed publicly without restrictions.',
+    ],
+    docUrl: 'https://cloud.maptiler.com/account/keys/',
+  },
+  {
+    id: 'locationiq-token',
+    name: 'LocationIQ Access Token',
+    severity: 'review',
+    regex: /(?:locationiq[_-]?(?:api)?[_-]?token\s*[:=]\s*["']?|pk\.)([a-f0-9]{32})/gi,
+    description: 'LocationIQ Geocoding & Mapping Access Token.',
+    remediationTitle: 'Restrict or Rotate LocationIQ Token',
+    remediationSteps: [
+      'Sign in to LocationIQ Dashboard (locationiq.com).',
+      'Configure IP / domain restrictions on the access token or regenerate.',
+    ],
+    docUrl: 'https://locationiq.com/',
+  },
+  {
+    id: 'here-api-key',
+    name: 'HERE Maps API Key',
+    severity: 'review',
+    regex: /here[_-]?(?:api)?[_-]?key\s*[:=]\s*["']?([A-Za-z0-9_-]{43})["']?/gi,
+    description: 'HERE Technologies platform & maps API key.',
+    remediationTitle: 'Rotate HERE Maps API Key',
+    remediationSteps: [
+      'Open developer.here.com → Projects → Credentials.',
+      'Generate a replacement API key and delete the old one.',
+    ],
+    docUrl: 'https://developer.here.com/',
+  },
+  {
+    id: 'tomtom-api-key',
+    name: 'TomTom API Key',
+    severity: 'review',
+    regex: /tomtom[_-]?(?:api)?[_-]?key\s*[:=]\s*["']?([a-zA-Z0-9]{32})["']?/gi,
+    description: 'TomTom Maps, Routing & Search API Key.',
+    remediationTitle: 'Rotate TomTom API Key',
+    remediationSteps: [
+      'Open TomTom Developer Portal (developer.tomtom.com) → Dashboard → Keys.',
+      'Regenerate the API key and update your client configuration.',
+    ],
+    docUrl: 'https://developer.tomtom.com/',
+  },
+  {
+    id: 'generic-map-key',
+    name: 'Exposed Map API Key / Token Variable',
+    severity: 'review',
+    regex: /\b(?:google_maps_api_key|google_map_api_key|google_maps_key|google_map_key|mapbox_access_token|mapbox_token|maps_api_key|map_api_key|geo_api_key)\s*[:=]\s*["']?([A-Za-z0-9_\-\.]{20,})["']?/gi,
+    description: 'Exposed Map API key or access token declared in source code or configuration files.',
+    remediationTitle: 'Secure Map API Key via Environment Variables',
+    remediationSteps: [
+      'Move plaintext map keys out of code and into environment variables or secrets manager.',
+      'Configure provider restrictions (HTTP referrers, iOS bundle IDs, Android package names / SHA-1 certificates) in the respective developer console.',
+    ],
+    docUrl: 'https://developers.google.com/maps/api-security-best-practices',
+  },
+  {
+    id: 'google-api-key',
+    name: 'Google API Key / Google Maps Key',
+    severity: 'review',
+    regex: /AIza[A-Za-z0-9_-]{35}/g,
+    description: 'Google Cloud / Google Maps / Firebase API Key. Verify application and API restrictions.',
+    remediationTitle: 'Restrict or Rotate Google / Maps API Key',
+    remediationSteps: [
+      'Open Google Cloud Console → APIs & Services → Credentials.',
+      'Inspect the key: apply Application Restrictions (HTTP referrers, Android apps, iOS apps, or IP addresses) and API Restrictions (e.g. Maps SDK only).',
+      'If unrestricted or previously misused, regenerate/rotate the key.',
+    ],
+    docUrl: 'https://console.cloud.google.com/apis/credentials',
+    requiresEntropyCheck: true,
+  },
+  {
     id: 'private-key-pem',
     name: 'Private Key PEM Block',
     severity: 'critical',
@@ -309,7 +419,7 @@ export const CREDENTIAL_PATTERNS: CredentialPattern[] = [
     id: 'git-url-creds',
     name: 'Git Remote URL Credentials',
     severity: 'critical',
-    regex: /https:\/\/[A-Za-z0-9_.-]+:[A-Za-z0-9_./+-]{8,}@(?:github|gitlab|bitbucket)/g,
+    regex: /https:\/\/[A-Za-z0-9_.-]+:[A-Za-z0-9_./+-]{8,}@(github|gitlab|bitbucket)/g,
     description: 'Plaintext username & password/token embedded inside a Git remote URL.',
     remediationTitle: 'Clean Git Remote URL & Rotate Password/Token',
     remediationSteps: [
@@ -318,21 +428,6 @@ export const CREDENTIAL_PATTERNS: CredentialPattern[] = [
       'Revoke the password or access token that was embedded in the URL.',
     ],
     docUrl: 'https://git-scm.com/docs/git-credential-store',
-  },
-  {
-    id: 'google-api-key',
-    name: 'Google API Key',
-    severity: 'review',
-    regex: /AIza[A-Za-z0-9_-]{35}/g,
-    description: 'Google Cloud / Maps / Firebase API Key. Note: may be a public client key or a server key needing restriction.',
-    remediationTitle: 'Restrict or Rotate Google API Key',
-    remediationSteps: [
-      'Open Google Cloud Console → APIs & Services → Credentials.',
-      'Inspect the key: apply Application Restrictions (HTTP referrers, Android apps, iOS apps, or IP addresses) and API Restrictions.',
-      'If unrestricted or previously misused, regenerate/rotate the key.',
-    ],
-    docUrl: 'https://console.cloud.google.com/apis/credentials',
-    requiresEntropyCheck: true,
   },
 ];
 
@@ -355,28 +450,51 @@ export const KNOWN_IGNORES = new Set([
   'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
 ]);
 
-// Binary / Asset extensions to exclude
+// Binary / Asset extensions to exclude from text scanning
 export const BINARY_EXCLUDE_EXTS = new Set([
   '.svg', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.ico', '.pdf',
-  '.woff', '.woff2', '.ttf', '.eot', '.otf', '.min.js', '.map', '.lock',
+  '.woff', '.woff2', '.ttf', '.eot', '.otf', '.min.js', '.lock',
   '.wasm', '.mp3', '.mp4', '.avi', '.mov', '.zip', '.tar', '.gz', '.7z',
-  '.exe', '.dylib', '.so', '.bin', '.vsix',
+  '.exe', '.dylib', '.so', '.bin', '.vsix', '.jar', '.aar',
+]);
+
+export const IGNORED_SCAN_DIRS = new Set([
+  '.git', 'node_modules', '.dart_tool', '.gradle', '.idea', '.vscode',
+  'Pods', '.venv', 'venv', 'dist', 'build', '.next', '.nuxt', '.output',
+  '.cache', '.turbo', 'coverage', 'target', 'vendor',
 ]);
 
 // ─── Shannon Entropy Check ───────────────────────────────────────────────────
 
 /**
- * Calculate Shannon entropy of a string body.
- * Real API keys generally have high entropy (H >= 2.6).
- * Repeated test strings (e.g. AAAAAAAAAAAAAAAAA) have low entropy or single-character domination (>45%).
+ * Calculate Shannon entropy of a candidate secret value.
+ * Real API keys generally have high entropy (H >= 2.0).
+ * Repeated test strings (e.g. AAAAAAAAAAAAAAAAA) have low entropy or single-character domination (>55%).
  */
 export function isLowEntropy(value: string): boolean {
-  if (!value || value.length < 8) return true;
+  if (!value || value.length < 8) return false;
 
-  // Strip common prefixes/delimiters to analyze entropy of the random body
-  const parts = value.split(/[_\-]/);
-  const body = parts[parts.length - 1] || value;
-  if (body.length < 8) return true;
+  let body = value;
+  if (value.startsWith('AIza')) {
+    // Google API Key: strip 'AIza' (4 chars) to evaluate the 35 random characters
+    body = value.slice(4);
+  } else if (value.startsWith('AKIA') || value.startsWith('ASIA')) {
+    // AWS Access Key ID: strip 'AKIA'/'ASIA' (4 chars)
+    body = value.slice(4);
+  } else if (value.startsWith('sk-proj-') || value.startsWith('sk-ant-')) {
+    body = value.slice(8);
+  } else if (value.startsWith('sk-') || value.startsWith('pk-')) {
+    body = value.slice(3);
+  } else {
+    // Generic key candidate: if hyphen/underscore delimited, check candidate body
+    const parts = value.split(/[_\-]/);
+    const candidate = parts[parts.length - 1];
+    if (candidate && candidate.length >= 8) {
+      body = candidate;
+    }
+  }
+
+  if (body.length < 8) return false;
 
   const counts = new Map<string, number>();
   for (let i = 0; i < body.length; i++) {
@@ -389,8 +507,8 @@ export function isLowEntropy(value: string): boolean {
     if (count > maxCount) maxCount = count;
   }
 
-  // If one character dominates more than 45% of the string, it is low-entropy / repetitive
-  if (maxCount / body.length > 0.45) return true;
+  // If one character dominates more than 55% of the string, it is repetitive dummy padding
+  if (maxCount / body.length > 0.55) return true;
 
   // Calculate Shannon entropy: H = -sum(p * log2(p))
   let entropy = 0;
@@ -399,7 +517,7 @@ export function isLowEntropy(value: string): boolean {
     entropy -= p * Math.log2(p);
   }
 
-  return entropy < 2.6;
+  return entropy < 2.0;
 }
 
 /**
@@ -557,12 +675,13 @@ export async function scanTrackedCredentials(
     const rawRefs = execGit(workspacePath, [
       'for-each-ref',
       'refs/heads',
-      'refs/remotes',
       '--format=%(refname:short)',
     ]).toString('utf8').trim();
 
-    const refs = rawRefs.split('\n').map(r => r.trim()).filter(Boolean);
-    if (refs.length === 0) return results;
+    let refs = rawRefs.split('\n').map(r => r.trim()).filter(Boolean);
+    if (refs.length === 0) {
+      refs = ['HEAD'];
+    }
 
     const seenKeys = new Set<string>();
 
@@ -570,7 +689,6 @@ export async function scanTrackedCredentials(
       const ref = refs[i];
       progressCallback?.(`Scanning tracked branch tip [${i + 1}/${refs.length}]: ${ref}`);
 
-      // List all tracked files at this ref
       let treeFilesRaw = '';
       try {
         treeFilesRaw = execGit(workspacePath, ['ls-tree', '-r', '--name-only', ref]).toString('utf8');
@@ -583,7 +701,7 @@ export async function scanTrackedCredentials(
       for (const file of files) {
         const ext = path.extname(file).toLowerCase();
         if (BINARY_EXCLUDE_EXTS.has(ext)) continue;
-        if (file.includes('node_modules/') || file.includes('.venv/')) continue;
+        if (file.includes('node_modules/') || file.includes('.venv/') || file.includes('dist/')) continue;
 
         try {
           const content = execGit(workspacePath, ['show', `${ref}:${file}`], 4 * 1024 * 1024).toString('utf8');
@@ -602,7 +720,7 @@ export async function scanTrackedCredentials(
       }
     }
   } catch {
-    // Git execution error
+    // Git execution error (e.g. non-git directory or bare repository)
   }
 
   return results;
@@ -714,22 +832,25 @@ export async function scanHistoryCredentials(
 
 /**
  * 3. Local & Untracked Files Scanner:
- * Scans disk for `.env`, `.npmrc`, `.aws/credentials`, config files, untracked scripts.
+ * Scans disk for source files, `.env`, `.npmrc`, configs, untracked scripts up to depth 30.
  */
 export async function scanLocalCredentials(
   workspacePath: string,
   progressCallback?: (msg: string) => void
 ): Promise<CredentialThreat[]> {
   const results: CredentialThreat[] = [];
-  progressCallback?.('Scanning local untracked files & disk configurations (.env, .npmrc)...');
+  progressCallback?.('Scanning local workspace files & configurations (.env, .dart, configs)...');
 
   function scanDir(dir: string, depth = 0) {
-    if (depth > 6) return;
+    if (depth > 30) return;
     try {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         const name = entry.name;
-        if (name === '.git' || name === 'node_modules' || name === '.venv' || name === 'venv' || name === 'dist' || name === 'build' || name === '.next') {
+        if (IGNORED_SCAN_DIRS.has(name)) {
+          continue;
+        }
+        if (name.startsWith('.') && name !== '.env' && !name.startsWith('.env.') && name !== '.npmrc' && name !== '.secrets') {
           continue;
         }
 

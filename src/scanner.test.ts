@@ -554,6 +554,9 @@ async function testCredentialScanner(): Promise<void> {
   assert.strictEqual(isIgnoredValue('YOUR_API_KEY_HERE'), true, 'YOUR_API_KEY_HERE should be ignored');
   assert.strictEqual(isLowEntropy('AKIAAAAAAAAAAAAAAAAA'), true, 'Repeated chars should be low entropy');
   assert.strictEqual(isLowEntropy('AKIA1B2C3D4E5F6G7H8I'), false, 'Random keys should pass entropy check');
+  assert.strictEqual(isLowEntropy('AIzaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'), true, 'Repeated Google API key should be low entropy');
+  assert.strictEqual(isLowEntropy('AIzaSyD-1234567890abcdefghijklmnopqrs'), false, 'Google API key with hyphens must pass entropy check');
+  assert.strictEqual(isLowEntropy('AIzaSyDx_1234567890abcdefghijklmnopqr'), false, 'Google API key with underscores must pass entropy check');
 
   // 3. Test Pattern Matching via findCredentialsInText
   const sampleText = [
@@ -565,7 +568,14 @@ async function testCredentialScanner(): Promise<void> {
     'STRIPE_KEY=sk_live_51Abcdefghijklmnopqrstuvwxyz01234567',
     'ANTHROPIC_KEY=sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz',
     'OPENAI_PROJ=sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefgh',
-    'GOOGLE_KEY=AIzaSyD1234567890abcdefghijklmnopqrstuv',
+    'GOOGLE_KEY=AIzaSyD-1234567890abcdefghijklmnopqrs',
+    'MAPBOX_SEC=sk.eyJ1234567890abcdefghijklmnopqrstuvwxyz01234.abcdefghijklmnopqrstuvwxyz',
+    'MAPBOX_PUB=pk.eyJ1234567890abcdefghijklmnopqrstuvwxyz01234.abcdefghijklmnopqrstuvwxyz',
+    'MAPTILER_KEY=maptiler_api_key="Abc123Xyz456Def7890G"',
+    'LOCATIONIQ=pk.0123456789abcdef0123456789abcdef',
+    'HERE_KEY=here_api_key = "AbcDefGhiJklMnoPqrStuVwxYz0123456789-_ABCDEF"',
+    'TOMTOM_KEY=tomtom_api_key = "0123456789abcdef0123456789abcdef"',
+    'GENERIC_MAP=google_maps_api_key: "AIzaSyD_abcdefghijklmnopqrstuvwxyz01234"',
   ].join('\n');
 
   const findings = findCredentialsInText(sampleText, 'config.ts', 'tracked');
@@ -579,13 +589,19 @@ async function testCredentialScanner(): Promise<void> {
   assert.ok(matchedRules.includes('anthropic-key'), 'Should match anthropic-key');
   assert.ok(matchedRules.includes('openai-key'), 'Should match openai-key');
   assert.ok(matchedRules.includes('google-api-key'), 'Should match google-api-key');
+  assert.ok(matchedRules.includes('mapbox-secret-token'), 'Should match mapbox-secret-token');
+  assert.ok(matchedRules.includes('mapbox-public-token'), 'Should match mapbox-public-token');
+  assert.ok(matchedRules.includes('maptiler-key'), 'Should match maptiler-key');
+  assert.ok(matchedRules.includes('locationiq-token'), 'Should match locationiq-token');
+  assert.ok(matchedRules.includes('here-api-key'), 'Should match here-api-key');
+  assert.ok(matchedRules.includes('tomtom-api-key'), 'Should match tomtom-api-key');
 
   // Verify that findings NEVER contain the raw plaintext secret in redactedValue
   for (const f of findings) {
     assert.ok(!f.redactedValue.includes('ghp_1234567890abcdef1234567890abcdef1234'), 'Plaintext secret must be redacted');
   }
 
-  // 4. Test runCredentialScan on a real test git workspace
+  // 4. Test runCredentialScan on a real test git workspace with deep directory nesting
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'guardian-cred-test-'));
   try {
     execFileSync('git', ['init', '-b', 'main'], { cwd: root });
@@ -603,6 +619,22 @@ async function testCredentialScanner(): Promise<void> {
     execFileSync('git', ['add', '.'], { cwd: root });
     execFileSync('git', ['commit', '--no-gpg-sign', '-m', 'Fix secret in code'], { cwd: root });
 
+    // Deep Flutter/Mobile-like nested file (depth 8) with exposed Google Maps key
+    const deepDir = path.join(root, 'app', 'android', 'app', 'src', 'main', 'res', 'values');
+    fs.mkdirSync(deepDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(deepDir, 'strings.xml'),
+      '<resources><string name="google_maps_key">AIzaSyDx1234567890abcdefghijklmnopqrstu</string></resources>\n'
+    );
+
+    // Deep Flutter Dart file
+    const dartDir = path.join(root, 'app', 'lib', 'features', 'maps', 'screens');
+    fs.mkdirSync(dartDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dartDir, 'map_screen.dart'),
+      'const String mapboxToken = "pk.eyJ1234567890abcdefghijklmnopqrstuvwxyz01234.abcdefghijklmnopqrstuvwxyz";\n'
+    );
+
     // Add local .env file (untracked)
     fs.writeFileSync(path.join(root, '.env'), 'ANTHROPIC_API_KEY=sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz\n');
 
@@ -619,11 +651,18 @@ async function testCredentialScanner(): Promise<void> {
       progressEvents.push(p);
     });
 
-    assert.ok(report.totalFindings >= 3, 'Should find at least 3 secrets (history, local, remote)');
+    assert.ok(report.totalFindings >= 5, `Should find at least 5 secrets, found: ${report.totalFindings}`);
     assert.ok(report.historyCount >= 1, 'Should find secret in git history');
-    assert.ok(report.localCount >= 1, 'Should find secret in local .env');
+    assert.ok(report.localCount >= 3, `Should find at least 3 local secrets in deep dirs, found: ${report.localCount}`);
     assert.ok(report.remotesCount >= 1, 'Should find secret in git remote URL');
     assert.ok(progressEvents.length > 0, 'Should trigger progress callbacks');
+
+    // Check specific map findings in deep dirs
+    const hasGoogleMaps = report.findings.some(f => f.id === 'google-api-key' && f.file.includes('strings.xml'));
+    assert.ok(hasGoogleMaps, 'Should detect Google Maps key in deep Android strings.xml');
+
+    const hasMapbox = report.findings.some(f => f.id === 'mapbox-public-token' && f.file.includes('map_screen.dart'));
+    assert.ok(hasMapbox, 'Should detect Mapbox token in deep Dart file');
 
     // 5. Test Exporters
     const tsv = exportCredentialTsv(report);
@@ -638,10 +677,22 @@ async function testCredentialScanner(): Promise<void> {
     assert.ok(md.includes('# Guardian — Credential & Secret Scan Report'));
     assert.ok(md.includes('## Findings Summary'));
 
-    // 6. Test Webview HTML Report with Tab 3
+    // 6. Test Webview HTML Report with Tab 3 (Both un-scanned initial state and scanned state)
+    const scanResultWithoutCreds: WorkspaceScanResult = {
+      workspacePath: root,
+      projectType: 'flutter',
+      scanDurationMs: 50,
+      safeRules: [],
+      branches: [],
+    };
+    const initialHtml = buildReportHtml(scanResultWithoutCreds, 'credential-scan');
+    assert.ok(initialHtml.includes('id="credential-audit-container"'), 'Initial HTML must include container');
+    assert.ok(initialHtml.includes('id="tab-credential-scan" class="tab-pane active"'), 'Tab 3 pane must be active');
+    assert.ok(initialHtml.includes('btn-cred-start'), 'Initial HTML must include start button');
+
     const scanResultWithCreds: WorkspaceScanResult = {
       workspacePath: root,
-      projectType: 'node',
+      projectType: 'flutter',
       scanDurationMs: 150,
       safeRules: [],
       branches: [],
@@ -651,10 +702,22 @@ async function testCredentialScanner(): Promise<void> {
     const credHtml = buildReportHtml(scanResultWithCreds, 'credential-scan');
     assert.ok(credHtml.includes('id="tab-btn-credential-scan"'), 'Should render Tab 3 button');
     assert.ok(credHtml.includes('id="tab-credential-scan" class="tab-pane active"'), 'Tab 3 pane should be active');
-    assert.ok(credHtml.includes('btn-cred-start'), 'Should render start credential scan button');
-    assert.ok(credHtml.includes('exportCredentialReport('), 'Should define exportCredentialReport');
-    assert.ok(credHtml.includes('triggerCredentialScan('), 'Should define triggerCredentialScan');
-    assert.ok(credHtml.includes('redactCredential') || credHtml.includes('MATCHED VALUE:'), 'Should render matched value box');
+    // Validate that client-side <script> in all HTML variants has 100% valid JS syntax without escaping errors
+    const vm = require('vm');
+    const validateScript = (html: string, label: string) => {
+      const match = html.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(match, `${label} must contain a <script> block`);
+      try {
+        new vm.Script(match[1]);
+      } catch (err: any) {
+        assert.fail(`SyntaxError in ${label} client script: ${err.message}`);
+      }
+    };
+
+    validateScript(initialHtml, 'initialHtml (credential-scan tab)');
+    validateScript(credHtml, 'credHtml (credential-scan tab with audit)');
+    validateScript(buildReportHtml(scanResultWithCreds, 'glassworm'), 'glassworm tab');
+    validateScript(buildReportHtml(scanResultWithCreds, 'extension-audit'), 'extension-audit tab');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

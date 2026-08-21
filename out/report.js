@@ -648,7 +648,6 @@ function buildCredentialSection(audit) {
     const remotesCount = audit?.remotesCount || 0;
     const orgAlertsCount = audit?.orgAlertsCount || 0;
     const isCritical = criticalCount > 0;
-    const isClean = totalFindings === 0;
     // Options Toolbar
     const optionsToolbar = `
     <div class="cred-options-card">
@@ -664,9 +663,15 @@ function buildCredentialSection(audit) {
           </button>
           ${hasAudit ? `
             <div class="cred-export-dropdown">
-              <button class="cred-export-btn" onclick="exportCredentialReport('tsv')" title="Export TSV Report (mode 0600)">
+              <button class="cred-export-btn" data-format="tsv" onclick="exportCredentialReportBtn(this)" title="Export TSV Report (mode 0600)">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Export Redacted TSV
+                Export TSV
+              </button>
+              <button class="cred-export-btn" data-format="json" onclick="exportCredentialReportBtn(this)" title="Export JSON Report">
+                JSON
+              </button>
+              <button class="cred-export-btn" data-format="md" onclick="exportCredentialReportBtn(this)" title="Export Markdown Report">
+                Markdown
               </button>
             </div>
           ` : ''}
@@ -711,8 +716,35 @@ function buildCredentialSection(audit) {
     if (!hasAudit) {
         return `
       <div id="credential-audit-container">
-        <div class="branches-section">
+        <div class="summary-hero ok" id="cred-summary-banner">
+          <div class="hero-left">
+            <div class="hero-check-circle">🛡️</div>
+            <div class="hero-text">
+              <div class="hero-title">Credential &amp; Secret Protection Scanner</div>
+              <div class="hero-sub">Audit your codebase, .env files, Map API keys, Git remote URLs, and commit diffs for exposed secrets.</div>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Run credential scan">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              Run Credential Scan
+            </button>
+          </div>
+        </div>
+
+        <div class="branches-section" id="cred-results-wrapper">
           ${optionsToolbar}
+
+          <div class="cred-incident-card" style="margin-top: 18px;">
+            <div class="incident-card-header">
+              <span class="incident-icon">🛡️</span>
+              <h4>Privacy-Preserving Offline Secret Scanner</h4>
+            </div>
+            <div class="incident-card-content">
+              <p><strong>Offline &amp; Redacted:</strong> Scans are executed locally on disk and in git. Matched secret values are never transmitted over the network and are masked (e.g. <code>AIzaSy…1234</code>) in all reports.</p>
+              <p><strong>Supported Credentials:</strong> Google Maps / Cloud API Keys, Mapbox (Public &amp; Secret Tokens), MapTiler, LocationIQ, HERE Maps, TomTom, GitHub PATs, AWS IAM Keys, Stripe Live Keys, OpenAI / Anthropic Keys, Slack Tokens, npm Auth Tokens, and Private Keys.</p>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -741,7 +773,7 @@ function buildCredentialSection(audit) {
         <div class="hero-icon">⚠️</div>
         <div class="hero-text">
           <div class="hero-title">${reviewCount} Credential${reviewCount !== 1 ? 's' : ''} Require Review</div>
-          <div class="hero-sub">Found keys (e.g. Google API Keys) that may be public or unrestricted. Verify key restrictions in Cloud Console.</div>
+          <div class="hero-sub">Found keys (e.g. Google / Map API Keys) that may be public or unrestricted. Verify key restrictions in the respective provider console.</div>
         </div>
       </div>
       <div class="hero-actions">
@@ -771,7 +803,7 @@ function buildCredentialSection(audit) {
     return `
     <div id="credential-audit-container">
       ${summaryBanner}
-      <div class="branches-section">
+      <div class="branches-section" id="cred-results-wrapper">
         ${optionsToolbar}
 
         <div class="branches-toolbar" style="margin-top: 16px;">
@@ -3937,13 +3969,7 @@ function buildReportHtml(result, initialTab = 'glassworm') {
       if (logEl) logEl.textContent = 'Scan complete: ' + report.totalFindings + ' finding(s) detected in ' + report.scanDurationMs + 'ms';
       setTimeout(() => {
         consoleWrap.style.display = 'none';
-      }, 1800);
-    }
-
-    const startBtn = document.getElementById('btn-cred-start');
-    if (startBtn) {
-      startBtn.disabled = false;
-      startBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Re-Run Secret Scan';
+      }, 1500);
     }
 
     // Update stat tab values
@@ -4001,12 +4027,13 @@ function buildReportHtml(result, initialTab = 'glassworm') {
       }
     }
 
-    // Update summary banner
-    const banner = document.getElementById('cred-summary-banner');
-    if (banner) {
-      if (report.criticalCount > 0) {
-        banner.className = 'summary-hero danger';
-        banner.innerHTML =
+    const container = document.getElementById('credential-audit-container');
+    if (!container) return;
+
+    let summaryBanner = '';
+    if (report.criticalCount > 0) {
+      summaryBanner =
+        '<div class="summary-hero danger" id="cred-summary-banner">' +
           '<div class="hero-left">' +
             '<div class="hero-icon">🚨</div>' +
             '<div class="hero-text">' +
@@ -4019,15 +4046,16 @@ function buildReportHtml(result, initialTab = 'glassworm') {
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
               'Re-Scan' +
             '</button>' +
-          '</div>';
-      } else if (report.reviewCount > 0) {
-        banner.className = 'summary-hero warn';
-        banner.innerHTML =
+          '</div>' +
+        '</div>';
+    } else if (report.reviewCount > 0) {
+      summaryBanner =
+        '<div class="summary-hero warn" id="cred-summary-banner">' +
           '<div class="hero-left">' +
             '<div class="hero-icon">⚠️</div>' +
             '<div class="hero-text">' +
               '<div class="hero-title">' + report.reviewCount + ' Credential' + (report.reviewCount !== 1 ? 's' : '') + ' Require Review</div>' +
-              '<div class="hero-sub">Found keys (e.g. Google API Keys) that may be public or unrestricted. Verify key restrictions in Cloud Console.</div>' +
+              '<div class="hero-sub">Found keys (e.g. Google / Map API Keys) that may be public or unrestricted. Verify key restrictions in the respective provider console.</div>' +
             '</div>' +
           '</div>' +
           '<div class="hero-actions">' +
@@ -4035,10 +4063,11 @@ function buildReportHtml(result, initialTab = 'glassworm') {
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
               'Re-Scan' +
             '</button>' +
-          '</div>';
-      } else {
-        banner.className = 'summary-hero ok';
-        banner.innerHTML =
+          '</div>' +
+        '</div>';
+    } else {
+      summaryBanner =
+        '<div class="summary-hero ok" id="cred-summary-banner">' +
           '<div class="hero-left">' +
             '<div class="hero-check-circle">✓</div>' +
             '<div class="hero-text">' +
@@ -4051,89 +4080,195 @@ function buildReportHtml(result, initialTab = 'glassworm') {
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
               'Re-Scan' +
             '</button>' +
-          '</div>';
-      }
+          '</div>' +
+        '</div>';
     }
 
-    // Re-render card DOM
-    const listEl = document.getElementById('cred-cards-list');
-    if (listEl) {
-      let cardsHtml = '';
-      (report.findings || []).forEach((t, idx) => {
-        const isCrit = t.severity === 'critical';
-        const isRev = t.severity === 'review';
-        const isSafe = !!t.isSafe;
-        const sevColor = isSafe ? 'var(--green)' : isCrit ? 'var(--red)' : isRev ? 'var(--yellow)' : 'var(--blue)';
-        const sevBg = isSafe ? 'var(--bg-green-soft)' : isCrit ? 'var(--bg-red-soft)' : isRev ? 'var(--bg-yellow-soft)' : 'var(--bg3)';
-        const sevBorder = isSafe ? 'rgba(74, 222, 128, 0.3)' : isCrit ? 'var(--border-red)' : isRev ? 'var(--border-yellow)' : 'var(--border)';
-        const sevText = isSafe ? 'SAFE' : isCrit ? 'CRITICAL SECRET' : isRev ? 'REVIEW REQUIRED' : 'INFO';
-        const drawerId = 'cred-drawer-cred-' + idx;
-        const drawerBtnId = 'cred-btn-drawer-cred-' + idx;
-
-        cardsHtml +=
-          '<div class="cred-card ' + (isSafe ? 'is-safe' : isCrit ? 'is-critical' : 'is-review') + '" id="cred-card-cred-' + idx + '" data-sev="' + escHtmlClient(t.severity) + '" data-safe="' + (isSafe ? 'true' : 'false') + '" data-location="' + escHtmlClient(t.locationType) + '" data-search="' + escHtmlClient(((t.ruleName || '') + ' ' + (t.file || '') + ' ' + (t.commit || '') + ' ' + (t.branch || '') + ' ' + (t.redactedValue || '') + ' ' + (t.fingerprint || '')).toLowerCase()) + '">' +
-            '<div class="cred-card-left-bar" style="background:' + sevColor + '"></div>' +
-            '<div class="cred-card-body">' +
-              '<div class="cred-card-header">' +
-                '<div class="cred-header-left">' +
-                  '<span class="sev-pill" style="background:' + sevBg + ';color:' + sevColor + ';border:1px solid ' + sevBorder + '">' + sevText + '</span>' +
-                  '<span class="cred-type-badge">' + escHtmlClient(t.ruleName) + '</span>' +
-                  '<span class="cred-location-badge loc-' + escHtmlClient(t.locationType) + '">' + credentialLocationLabelClient(t.locationType) + '</span>' +
-                '</div>' +
-                '<div class="cred-header-right">' +
-                  '<button class="cred-file-link-btn" data-file="' + escHtmlClient(t.file) + '" data-line="' + (t.line || 1) + '" data-location-type="' + escHtmlClient(t.locationType) + '" data-branch-commit="' + escHtmlClient(t.commit || t.branch || '') + '" onclick="openCredentialLocationBtn(this)" title="Open file in editor">' +
-                    '<span class="file-icon">📄</span>' +
-                    '<span class="file-name">' + escHtmlClient(t.file) + (t.line ? ':' + t.line : '') + '</span>' +
-                    (t.commit ? '<span class="commit-pill">commit: ' + escHtmlClient(t.commit) + '</span>' : '') +
-                    (t.branch ? '<span class="branch-pill">' + escHtmlClient(t.branch) + '</span>' : '') +
-                  '</button>' +
-                '</div>' +
-              '</div>' +
-              '<div class="cred-desc">' + escHtmlClient(t.description) + '</div>' +
-              '<div class="cred-value-box">' +
-                '<div class="cred-value-left">' +
-                  '<span class="cred-value-label">MATCHED VALUE:</span>' +
-                  '<code class="cred-value-code">' + escHtmlClient(t.redactedValue) + '</code>' +
-                  '<span class="cred-fp-badge" title="SHA-256 Fingerprint">' + escHtmlClient(t.fingerprint) + '</span>' +
-                '</div>' +
-                '<div class="cred-value-actions">' +
-                  '<button class="cred-copy-btn" data-value="' + escHtmlClient(t.redactedValue) + '" onclick="copyRedactedBtn(this)" title="Copy Redacted Value"><span class="btn-icon">📋</span> Copy Masked</button>' +
-                  '<button class="cred-copy-btn" data-value="' + escHtmlClient(t.fingerprint) + '" onclick="copyFingerprintBtn(this)" title="Copy SHA-256 Fingerprint"><span class="btn-icon">🔑</span> Copy SHA-256</button>' +
-                  '<button class="cred-remediation-btn" id="' + drawerBtnId + '" data-drawer="' + drawerId + '" onclick="toggleRemediationDrawerBtn(this)"><span class="btn-icon">🛠️</span> Remediation Steps ▾</button>' +
-                '</div>' +
-              '</div>' +
-              (t.snippet ? '<div class="cred-snippet-wrap"><div class="cred-snippet-header"><span class="snippet-tag">Context Snippet</span></div><pre class="cred-snippet-pre">' + escHtmlClient(t.snippet) + '</pre></div>' : '') +
-              '<div class="cred-remediation-drawer" id="' + drawerId + '" style="display:none;">' +
-                '<div class="remediation-inner">' +
-                  '<div class="remediation-header">' +
-                    '<span class="remediation-icon">🛡️</span>' +
-                    '<span class="remediation-title">' + escHtmlClient(t.remediation ? t.remediation.title : 'Remediation Steps') + '</span>' +
-                    (t.remediation && t.remediation.docUrl ? '<a href="' + escHtmlClient(t.remediation.docUrl) + '" target="_blank" class="remediation-link">Official Revocation Portal ↗</a>' : '') +
-                  '</div>' +
-                  '<ol class="remediation-steps">' +
-                    ((t.remediation && t.remediation.steps) ? t.remediation.steps.map(s => '<li>' + escHtmlClient(s) + '</li>').join('') : '') +
-                  '</ol>' +
-                '</div>' +
-              '</div>' +
+    const optionsToolbar =
+      '<div class="cred-options-card">' +
+        '<div class="cred-options-header">' +
+          '<div class="options-title-box">' +
+            '<span class="options-icon">⚙️</span>' +
+            '<span class="options-title">Scan Scope &amp; Target Coverage</span>' +
+          '</div>' +
+          '<div class="options-actions">' +
+            '<button class="cred-start-btn" id="btn-cred-start" onclick="triggerCredentialScan()">' +
+              '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>' +
+              'Re-Run Secret Scan' +
+            '</button>' +
+            '<div class="cred-export-dropdown">' +
+              '<button class="cred-export-btn" data-format="tsv" onclick="exportCredentialReportBtn(this)" title="Export TSV Report (mode 0600)">' +
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
+                'Export TSV' +
+              '</button>' +
+              '<button class="cred-export-btn" data-format="json" onclick="exportCredentialReportBtn(this)" title="Export JSON Report">' +
+                'JSON' +
+              '</button>' +
+              '<button class="cred-export-btn" data-format="md" onclick="exportCredentialReportBtn(this)" title="Export Markdown Report">' +
+                'Markdown' +
+              '</button>' +
             '</div>' +
-          '</div>';
-      });
+          '</div>' +
+        '</div>' +
+        '<div class="cred-options-grid">' +
+          '<label class="cred-option-checkbox">' +
+            '<input type="checkbox" id="cred-opt-tracked" ' + (report.options?.scanTracked !== false ? 'checked' : '') + ' />' +
+            '<span class="opt-label-text">' +
+              '<strong>Tracked Branch Tips</strong>' +
+              '<span class="opt-sub">Committed files across all local &amp; remote refs</span>' +
+            '</span>' +
+          '</label>' +
+          '<label class="cred-option-checkbox">' +
+            '<input type="checkbox" id="cred-opt-history" ' + (report.options?.scanHistory ? 'checked' : '') + ' />' +
+            '<span class="opt-label-text">' +
+              '<strong>Deep Git History (<code>--history</code>)</strong>' +
+              '<span class="opt-sub">Inspect past commit diffs (catches deleted secrets)</span>' +
+            '</span>' +
+          '</label>' +
+          '<label class="cred-option-checkbox">' +
+            '<input type="checkbox" id="cred-opt-local" ' + (report.options?.scanLocal !== false ? 'checked' : '') + ' />' +
+            '<span class="opt-label-text">' +
+              '<strong>Local &amp; Untracked Files (<code>--local</code>)</strong>' +
+              '<span class="opt-sub">Check disk files (.env, .npmrc, untracked scripts)</span>' +
+            '</span>' +
+          '</label>' +
+          '<label class="cred-option-checkbox">' +
+            '<input type="checkbox" id="cred-opt-remotes" ' + (report.options?.scanRemotes !== false ? 'checked' : '') + ' />' +
+            '<span class="opt-label-text">' +
+              '<strong>Git Remote URLs</strong>' +
+              '<span class="opt-sub">Check <code>.git/config</code> for embedded tokens</span>' +
+            '</span>' +
+          '</label>' +
+        '</div>' +
+        '<div class="cred-org-row">' +
+          '<span class="cred-org-label">☁️ GitHub Organization (Optional):</span>' +
+          '<input type="text" class="cred-org-input" id="cred-opt-orgs" value="' + escHtmlClient((report.options?.githubOrgs || []).join(', ')) + '" placeholder="e.g. my-organization (queries open GitHub Secret Scanning alerts)" />' +
+        '</div>' +
+      '</div>';
+
+    let cardsHtml = '';
+    (report.findings || []).forEach((t, idx) => {
+      const isCrit = t.severity === 'critical';
+      const isRev = t.severity === 'review';
+      const isSafe = !!t.isSafe;
+      const sevColor = isSafe ? 'var(--green)' : isCrit ? 'var(--red)' : isRev ? 'var(--yellow)' : 'var(--blue)';
+      const sevBg = isSafe ? 'var(--bg-green-soft)' : isCrit ? 'var(--bg-red-soft)' : isRev ? 'var(--bg-yellow-soft)' : 'var(--bg3)';
+      const sevBorder = isSafe ? 'rgba(74, 222, 128, 0.3)' : isCrit ? 'var(--border-red)' : isRev ? 'var(--border-yellow)' : 'var(--border)';
+      const sevText = isSafe ? 'SAFE' : isCrit ? 'CRITICAL SECRET' : isRev ? 'REVIEW REQUIRED' : 'INFO';
+      const drawerId = 'cred-drawer-cred-' + idx;
+      const drawerBtnId = 'cred-btn-drawer-cred-' + idx;
 
       cardsHtml +=
-        '<div id="cred-filter-empty-state" class="ext-filter-empty-state" style="' + (report.totalFindings === 0 ? 'display:flex;' : 'display:none;') + '">' +
-          '<div class="empty-state-icon-box">' +
-            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>' +
+        '<div class="cred-card ' + (isSafe ? 'is-safe' : isCrit ? 'is-critical' : 'is-review') + '" id="cred-card-cred-' + idx + '" data-sev="' + escHtmlClient(t.severity) + '" data-safe="' + (isSafe ? 'true' : 'false') + '" data-location="' + escHtmlClient(t.locationType) + '" data-search="' + escHtmlClient(((t.ruleName || '') + ' ' + (t.file || '') + ' ' + (t.commit || '') + ' ' + (t.branch || '') + ' ' + (t.redactedValue || '') + ' ' + (t.fingerprint || '')).toLowerCase()) + '">' +
+          '<div class="cred-card-left-bar" style="background:' + sevColor + '"></div>' +
+          '<div class="cred-card-body">' +
+            '<div class="cred-card-header">' +
+              '<div class="cred-header-left">' +
+                '<span class="sev-pill" style="background:' + sevBg + ';color:' + sevColor + ';border:1px solid ' + sevBorder + '">' + sevText + '</span>' +
+                '<span class="cred-type-badge">' + escHtmlClient(t.ruleName) + '</span>' +
+                '<span class="cred-location-badge loc-' + escHtmlClient(t.locationType) + '">' + credentialLocationLabelClient(t.locationType) + '</span>' +
+              '</div>' +
+              '<div class="cred-header-right">' +
+                '<button class="cred-file-link-btn" data-file="' + escHtmlClient(t.file) + '" data-line="' + (t.line || 1) + '" data-location-type="' + escHtmlClient(t.locationType) + '" data-branch-commit="' + escHtmlClient(t.commit || t.branch || '') + '" onclick="openCredentialLocationBtn(this)" title="Open file in editor">' +
+                  '<span class="file-icon">📄</span>' +
+                  '<span class="file-name">' + escHtmlClient(t.file) + (t.line ? ':' + t.line : '') + '</span>' +
+                  (t.commit ? '<span class="commit-pill">commit: ' + escHtmlClient(t.commit) + '</span>' : '') +
+                  (t.branch ? '<span class="branch-pill">' + escHtmlClient(t.branch) + '</span>' : '') +
+                '</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="cred-desc">' + escHtmlClient(t.description) + '</div>' +
+            '<div class="cred-value-box">' +
+              '<div class="cred-value-left">' +
+                '<span class="cred-value-label">MATCHED VALUE:</span>' +
+                '<code class="cred-value-code">' + escHtmlClient(t.redactedValue) + '</code>' +
+                '<span class="cred-fp-badge" title="SHA-256 Fingerprint">' + escHtmlClient(t.fingerprint) + '</span>' +
+              '</div>' +
+              '<div class="cred-value-actions">' +
+                '<button class="cred-copy-btn" data-value="' + escHtmlClient(t.redactedValue) + '" onclick="copyRedactedBtn(this)" title="Copy Redacted Value"><span class="btn-icon">📋</span> Copy Masked</button>' +
+                '<button class="cred-copy-btn" data-value="' + escHtmlClient(t.fingerprint) + '" onclick="copyFingerprintBtn(this)" title="Copy SHA-256 Fingerprint"><span class="btn-icon">🔑</span> Copy SHA-256</button>' +
+                '<button class="cred-remediation-btn" id="' + drawerBtnId + '" data-drawer="' + drawerId + '" onclick="toggleRemediationDrawerBtn(this)"><span class="btn-icon">🛠️</span> Remediation Steps ▾</button>' +
+              '</div>' +
+            '</div>' +
+            (t.snippet ? '<div class="cred-snippet-wrap"><div class="cred-snippet-header"><span class="snippet-tag">Context Snippet</span></div><pre class="cred-snippet-pre">' + escHtmlClient(t.snippet) + '</pre></div>' : '') +
+            '<div class="cred-remediation-drawer" id="' + drawerId + '" style="display:none;">' +
+              '<div class="remediation-inner">' +
+                '<div class="remediation-header">' +
+                  '<span class="remediation-icon">🛡️</span>' +
+                  '<span class="remediation-title">' + escHtmlClient(t.remediation ? t.remediation.title : 'Remediation Steps') + '</span>' +
+                  (t.remediation && t.remediation.docUrl ? '<a href="' + escHtmlClient(t.remediation.docUrl) + '" target="_blank" class="remediation-link">Official Revocation Portal ↗</a>' : '') +
+                '</div>' +
+                '<ol class="remediation-steps">' +
+                  ((t.remediation && t.remediation.steps) ? t.remediation.steps.map(s => '<li>' + escHtmlClient(s) + '</li>').join('') : '') +
+                '</ol>' +
+              '</div>' +
+            '</div>' +
           '</div>' +
-          '<div class="empty-state-title" id="cred-empty-msg">No credentials match the selected filter.</div>' +
-          '<div class="empty-state-sub" id="cred-empty-sub">Try changing your severity, location, or search filters above.</div>' +
-          '<button class="ext-reset-btn" onclick="clearCredSearchAndFilter()">' +
-            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>' +
-            'Reset Filters' +
-          '</button>' +
         '</div>';
+    });
 
-      listEl.innerHTML = cardsHtml;
-    }
+    container.innerHTML =
+      summaryBanner +
+      '<div class="branches-section" id="cred-results-wrapper">' +
+        optionsToolbar +
+        '<div class="branches-toolbar" style="margin-top: 16px;">' +
+          '<div class="branches-toolbar-left">' +
+            '<span class="branches-toolbar-title">Credential &amp; Secret Findings</span>' +
+            '<span class="branches-filter-count" id="cred-filter-count">Showing all ' + report.totalFindings + ' findings</span>' +
+          '</div>' +
+          '<div class="branches-filter-controls">' +
+            '<div class="filter-group">' +
+              '<span class="filter-group-label">Severity:</span>' +
+              '<div class="filter-group-buttons">' +
+                '<button class="filter-tag active" data-cred-filter="all" onclick="handleCredFilterClick(this)">All (' + report.totalFindings + ')</button>' +
+                '<button class="filter-tag filter-tag-infected ' + (report.criticalCount > 0 ? 'has-badge' : '') + '" data-cred-filter="critical" onclick="handleCredFilterClick(this)">🔴 Critical (' + report.criticalCount + ')</button>' +
+                '<button class="filter-tag" data-cred-filter="review" onclick="handleCredFilterClick(this)">🟡 Review (' + report.reviewCount + ')</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="filter-group">' +
+              '<span class="filter-group-label">Source:</span>' +
+              '<div class="filter-group-buttons">' +
+                '<button class="filter-tag active" data-cred-location="all" onclick="handleCredLocationFilterClick(this)">All</button>' +
+                (report.trackedCount > 0 ? '<button class="filter-tag" data-cred-location="tracked" onclick="handleCredLocationFilterClick(this)">💻 Tracked (' + report.trackedCount + ')</button>' : '') +
+                (report.historyCount > 0 ? '<button class="filter-tag" data-cred-location="history" onclick="handleCredLocationFilterClick(this)">📜 History (' + report.historyCount + ')</button>' : '') +
+                (report.localCount > 0 ? '<button class="filter-tag" data-cred-location="local" onclick="handleCredLocationFilterClick(this)">📄 Local .env (' + report.localCount + ')</button>' : '') +
+                (report.remotesCount > 0 ? '<button class="filter-tag" data-cred-location="git-remote" onclick="handleCredLocationFilterClick(this)">🌐 Remote (' + report.remotesCount + ')</button>' : '') +
+                (report.orgAlertsCount > 0 ? '<button class="filter-tag" data-cred-location="github-alert" onclick="handleCredLocationFilterClick(this)">☁️ Org Alert (' + report.orgAlertsCount + ')</button>' : '') +
+              '</div>' +
+            '</div>' +
+            '<div class="ext-search-box">' +
+              '<span class="ext-search-icon">🔍</span>' +
+              '<input type="text" class="ext-search-input" id="cred-search-input" placeholder="Search secrets, files, commits, fingerprints..." oninput="searchCredentials(this.value)" />' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="cred-cards-list" id="cred-cards-list">' +
+          cardsHtml +
+          '<div id="cred-filter-empty-state" class="ext-filter-empty-state" style="' + (report.totalFindings === 0 ? 'display:flex;' : 'display:none;') + '">' +
+            '<div class="empty-state-icon-box">' +
+              '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>' +
+            '</div>' +
+            '<div class="empty-state-title" id="cred-empty-msg">No credentials match the selected filter.</div>' +
+            '<div class="empty-state-sub" id="cred-empty-sub">Try changing your severity, location, or search filters above.</div>' +
+            '<button class="ext-reset-btn" onclick="clearCredSearchAndFilter()">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>' +
+              'Reset Filters' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="cred-incident-card">' +
+          '<div class="incident-card-header">' +
+            '<span class="incident-icon">🚨</span>' +
+            '<h4>Incident Response &amp; Secret Revocation Rules</h4>' +
+          '</div>' +
+          '<div class="incident-card-content">' +
+            '<p><strong>1. Revoke First, Rotate Second:</strong> If active compromise is suspected, revoke the credential immediately at the vendor dashboard. Deleting a file or rewriting Git history does <em>not</em> deactivate an exposed key.</p>' +
+            '<p><strong>2. Purge Historic Commits:</strong> To completely wipe deleted secrets from Git history, use <code>git filter-repo</code>:</p>' +
+            '<pre class="incident-code">git filter-repo --invert-paths --path &lt;relative-file-path&gt;</pre>' +
+            '<p><strong>3. Never Commit Plaintext Secrets:</strong> Use environment variables (<code>.env</code> in <code>.gitignore</code>), secret stores (AWS Secrets Manager, GCP Secret Manager, Vault), or GitHub Secrets for CI/CD workflows.</p>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
 
     applyCredFilters();
   }
@@ -4161,6 +4296,11 @@ function buildReportHtml(result, initialTab = 'glassworm') {
 
   function exportCredentialReport(format) {
     vscode.postMessage({ action: 'exportCredentialReport', format: format || 'tsv' });
+  }
+
+  function exportCredentialReportBtn(btn) {
+    const format = btn.getAttribute('data-format') || 'tsv';
+    exportCredentialReport(format);
   }
 
   function openCredentialLocationBtn(btn) {
