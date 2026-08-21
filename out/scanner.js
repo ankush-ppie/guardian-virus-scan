@@ -40,6 +40,8 @@ exports.isGitRepo = isGitRepo;
 exports.getCurrentBranch = getCurrentBranch;
 exports.getAllLocalBranches = getAllLocalBranches;
 exports.getAllRemoteBranches = getAllRemoteBranches;
+exports.hasRemotes = hasRemotes;
+exports.fetchRemoteRefs = fetchRemoteRefs;
 exports.readFileFromBranch = readFileFromBranch;
 exports.readBinaryFromBranch = readBinaryFromBranch;
 exports.listFilesInBranch = listFilesInBranch;
@@ -54,12 +56,14 @@ const path = __importStar(require("path"));
 const preferences_1 = require("./preferences");
 const MAX_GIT_OBJECT_BYTES = 8 * 1024 * 1024;
 /** Run Git without a shell so malicious ref or path names cannot inject commands. */
-function runGit(workspacePath, args, maxBuffer = MAX_GIT_OBJECT_BYTES) {
+function runGit(workspacePath, args, maxBuffer = MAX_GIT_OBJECT_BYTES, timeoutMs, customEnv) {
     return (0, child_process_1.execFileSync)('git', args, {
         cwd: workspacePath,
         stdio: ['ignore', 'pipe', 'pipe'],
         maxBuffer,
         windowsHide: true,
+        timeout: timeoutMs,
+        env: customEnv ? { ...process.env, ...customEnv } : process.env,
     });
 }
 function getActiveThreats(threats) {
@@ -124,6 +128,37 @@ function getAllRemoteBranches(workspacePath) {
     }
     catch {
         return [];
+    }
+}
+/** Check if a git repository has any remotes configured. */
+function hasRemotes(workspacePath) {
+    try {
+        const raw = runGit(workspacePath, ['remote']).toString().trim();
+        return raw.length > 0;
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * Fetch all remote branches and tags into the local Git object store (.git/objects)
+ * without checking out or modifying any files in the working tree.
+ * Uses strict timeouts and disables interactive credential prompts so scans never hang.
+ */
+function fetchRemoteRefs(workspacePath, timeoutMs = 8000) {
+    if (!hasRemotes(workspacePath)) {
+        return false;
+    }
+    try {
+        runGit(workspacePath, ['fetch', '--all', '--prune', '--quiet'], MAX_GIT_OBJECT_BYTES, timeoutMs, {
+            GIT_TERMINAL_PROMPT: '0',
+            GIT_ASKPASS: '',
+            SSH_ASKPASS: '',
+        });
+        return true;
+    }
+    catch {
+        return false;
     }
 }
 /**

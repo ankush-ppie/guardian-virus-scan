@@ -34,12 +34,20 @@ export interface BranchScanResult {
 const MAX_GIT_OBJECT_BYTES = 8 * 1024 * 1024;
 
 /** Run Git without a shell so malicious ref or path names cannot inject commands. */
-function runGit(workspacePath: string, args: string[], maxBuffer = MAX_GIT_OBJECT_BYTES): Buffer {
+function runGit(
+  workspacePath: string,
+  args: string[],
+  maxBuffer = MAX_GIT_OBJECT_BYTES,
+  timeoutMs?: number,
+  customEnv?: Record<string, string>
+): Buffer {
   return execFileSync('git', args, {
     cwd: workspacePath,
     stdio: ['ignore', 'pipe', 'pipe'],
     maxBuffer,
     windowsHide: true,
+    timeout: timeoutMs,
+    env: customEnv ? { ...process.env, ...customEnv } : process.env,
   });
 }
 
@@ -118,6 +126,41 @@ export function getAllRemoteBranches(workspacePath: string): string[] {
       .filter(b => b && !b.endsWith('/HEAD'))
       .filter(Boolean);
   } catch { return []; }
+}
+
+/** Check if a git repository has any remotes configured. */
+export function hasRemotes(workspacePath: string): boolean {
+  try {
+    const raw = runGit(workspacePath, ['remote']).toString().trim();
+    return raw.length > 0;
+  } catch { return false; }
+}
+
+/**
+ * Fetch all remote branches and tags into the local Git object store (.git/objects)
+ * without checking out or modifying any files in the working tree.
+ * Uses strict timeouts and disables interactive credential prompts so scans never hang.
+ */
+export function fetchRemoteRefs(workspacePath: string, timeoutMs = 8000): boolean {
+  if (!hasRemotes(workspacePath)) {
+    return false;
+  }
+  try {
+    runGit(
+      workspacePath,
+      ['fetch', '--all', '--prune', '--quiet'],
+      MAX_GIT_OBJECT_BYTES,
+      timeoutMs,
+      {
+        GIT_TERMINAL_PROMPT: '0',
+        GIT_ASKPASS: '',
+        SSH_ASKPASS: '',
+      }
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -54,9 +54,9 @@ When you open an untrusted project or pull a branch, attackers exploit automated
 * 📑 **2-Tab Security Dashboard**: Cleanly separated views for **Glassworm & Security Report** (Tab 1) and **Extension Audit** (Tab 2) with active status badges and state persistence.
 * 📦 **Supply-Chain Extension Auditor**: Audits all installed VS Code & editor extensions against a database of 418+ known malicious extension IDs and runs deep heuristic analysis (ForceMemo markers `lzcdrtfxyqiplpd`, invisible Unicode runs `U+FE00–U+FE0F`/`U+E0100–U+E01EF`, and decoder patterns).
 * 🗑️ **One-Click Extension Remediation**: Remove all detected malicious extensions at once or uninstall them 1-by-1 directly from the report view with CLI fallback commands.
-* 🔍 **Multi-Branch & Ref Scanner**: Inspects all local branches and remote-tracking refs directly via safe Git object database reads.
+* 🔍 **Multi-Branch & Ref Scanner**: Inspects all local branches and remote-tracking refs directly via safe Git object database reads with automatic non-blocking remote ref updates (`git fetch --all --prune`).
 * 🌳 **Working Tree & Untracked Coverage**: Detects ignored, untracked, and newly modified high-risk files in your active workspace.
-* 🔒 **Zero Workspace Disturbance**: Never checks out branches, never alters your Git index, never executes repository files, and never contacts remote servers.
+* 🔒 **Zero Workspace Disturbance**: Never checks out branches, never alters your working tree files or index, and never executes untrusted code.
 * 🎯 **Incident-Tested Glassworm Signatures**: Specific pattern recognition for confirmed Glassworm loader variants, fake font payloads, and amend/force-push propagation helpers.
 * 🛡️ **False-Positive Whitelisting**: Mark benign custom rules as Safe for **This Project** or **All Projects** globally with instant UI reclassification.
 * ⚡ **Shell-Safe Execution**: Git commands use strict argument arrays, preventing crafted branch or commit names from becoming shell injections.

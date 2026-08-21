@@ -2,7 +2,7 @@
 	"name": "guardian-virus-scan",
 	"displayName": "Guardian — Glassworm & Malware Scanner",
 	"description": "Glassworm & malware scanner for VS Code. Detects malicious workspace tasks, injected configs, fake fonts, and stealth propagation scripts across Git branches.",
-	"version": "1.5.0",
+	"version": "1.5.1",
 	"publisher": "ankushlokhande",
 	"license": "MIT",
 	"icon": "media/logo.png",
@@ -84,7 +84,17 @@
 				"command": "guardian.auditExtensions",
 				"title": "Guardian: Scan Installed Extensions for Malware"
 			}
-		]
+		],
+		"configuration": {
+			"title": "Guardian",
+			"properties": {
+				"guardian.fetchRemotesBeforeScan": {
+					"type": "boolean",
+					"default": true,
+					"description": "Automatically fetch remote branch metadata (git fetch --all --prune) before scanning to detect newly created or updated remote branches."
+				}
+			}
+		}
 	},
 	"scripts": {
 		"compile": "tsc -p ./",

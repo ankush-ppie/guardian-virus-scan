@@ -2,6 +2,15 @@
 
 All notable changes to the **Guardian Virus Scan** extension will be documented in this file.
 
+## [1.5.1] - 2026-08-21
+
+### Added
+- **Automatic Remote Branch Ref Synchronization**:
+  - Automatically fetches updated remote-tracking branch metadata (`git fetch --all --prune`) before executing workspace scans.
+  - Detects new and updated remote branches pushed to origin without requiring manual terminal fetch commands.
+  - Safe & non-blocking: uses strict timeouts and disables interactive credential prompts (`GIT_TERMINAL_PROMPT=0`, `GIT_ASKPASS=""`) with graceful fallback to cached refs when offline.
+  - Configurable via `guardian.fetchRemotesBeforeScan` in VS Code settings.
+
 ## [1.5.0] - 2026-08-20
 
 ### Added

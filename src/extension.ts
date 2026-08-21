@@ -13,6 +13,8 @@ import {
   WorkspaceScanResult,
   applySafePreferences,
   getActiveThreats,
+  hasRemotes,
+  fetchRemoteRefs,
 } from './scanner';
 import { buildReportHtml } from './report';
 import { getAllSafeRules, addSafeRule, removeSafeRule } from './preferences';
@@ -40,12 +42,24 @@ async function runFullScan(
     throw new Error('Not a git repository.');
   }
 
+  const config = vscode.workspace.getConfiguration('guardian');
+  const shouldFetch = config.get<boolean>('fetchRemotesBeforeScan', true);
+
+  if (shouldFetch && !token.isCancellationRequested && hasRemotes(workspacePath)) {
+    progress.report({ message: 'Fetching latest remote branches from origin...' });
+    try {
+      fetchRemoteRefs(workspacePath);
+    } catch {
+      // Non-blocking fallback: proceed with locally cached refs
+    }
+  }
+
   const currentBranch = getCurrentBranch(workspacePath);
   const branches = getAllLocalBranches(workspacePath);
   const remoteBranches = getAllRemoteBranches(workspacePath);
 
-  // Remote-tracking refs are already present in the local Git object database;
-  // scanning them requires no checkout, fetch, or network access.
+  // Remote-tracking refs are present in the local Git object database;
+  // scanning them requires no checkout or disk changes.
   // Exclude currentBranch because scanWorkingTree already scans the working tree for currentBranch.
   const refsToScan = [...new Set([...branches, ...remoteBranches])].filter(b => b !== currentBranch);
 

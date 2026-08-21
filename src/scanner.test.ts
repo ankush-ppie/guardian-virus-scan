@@ -3,7 +3,16 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { scanBranch, scanInjectedConfig, scanPropagationScript, scanWorkingTree, WorkspaceScanResult } from './scanner';
+import {
+  scanBranch,
+  scanInjectedConfig,
+  scanPropagationScript,
+  scanWorkingTree,
+  WorkspaceScanResult,
+  hasRemotes,
+  fetchRemoteRefs,
+  getAllRemoteBranches,
+} from './scanner';
 import { buildReportHtml } from './report';
 
 function rules(threats: Array<{ rule: string }>): string[] {
@@ -95,6 +104,67 @@ function testRemoteTrackingRefCoverage(): void {
     assert.ok(rules(result.threats).includes('KNOWN_INJECTED_CONFIG_V1'));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function testFetchRemoteRefs(): void {
+  const remoteRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardian-remote-test-'));
+  const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardian-local-test-'));
+
+  const git = (cwd: string, ...args: string[]) => execFileSync('git', args, {
+    cwd,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  try {
+    // 1. Setup mock remote repository with main and infected-branch
+    git(remoteRoot, 'init', '-q');
+    git(remoteRoot, 'config', 'user.name', 'Remote Origin');
+    git(remoteRoot, 'config', 'user.email', 'origin@example.invalid');
+    git(remoteRoot, 'config', 'commit.gpgsign', 'false');
+    fs.writeFileSync(path.join(remoteRoot, 'package.json'), '{}');
+    git(remoteRoot, 'add', '.');
+    git(remoteRoot, 'commit', '-qm', 'initial');
+
+    // Create an infected branch on the remote
+    git(remoteRoot, 'checkout', '-qb', 'feature/remote-infected');
+    fs.writeFileSync(
+      path.join(remoteRoot, 'postcss.config.mjs'),
+      `export default { plugins: {} };` + ' '.repeat(200) +
+      `global['!']='9';const marker='rmcej%otb%';`
+    );
+    git(remoteRoot, 'add', '.');
+    git(remoteRoot, 'commit', '-qm', 'infected commit');
+    git(remoteRoot, 'checkout', '-q', 'main');
+
+    // 2. Setup local repository with remote 'origin'
+    git(localRoot, 'init', '-q');
+    git(localRoot, 'config', 'user.name', 'Local User');
+    git(localRoot, 'config', 'user.email', 'user@example.invalid');
+    git(localRoot, 'config', 'commit.gpgsign', 'false');
+    git(localRoot, 'remote', 'add', 'origin', remoteRoot);
+
+    assert.strictEqual(hasRemotes(localRoot), true, 'hasRemotes should be true when origin is configured');
+
+    // Before fetch: no remote branches locally
+    const remotesBefore = getAllRemoteBranches(localRoot);
+    assert.strictEqual(remotesBefore.length, 0, 'No remote branches should exist locally before fetch');
+
+    // Execute fetchRemoteRefs
+    const fetchSuccess = fetchRemoteRefs(localRoot);
+    assert.strictEqual(fetchSuccess, true, 'fetchRemoteRefs should return true on success');
+
+    // After fetch: remote tracking branches exist locally without checking them out
+    const remotesAfter = getAllRemoteBranches(localRoot);
+    assert.ok(remotesAfter.includes('origin/feature/remote-infected'), 'Remote tracking branch should be fetched');
+
+    // Scan the newly fetched remote branch
+    const scanRes = scanBranch(localRoot, 'origin/feature/remote-infected', 'main', 'node');
+    assert.ok(rules(scanRes.threats).includes('KNOWN_INJECTED_CONFIG_V1'), 'Scanner must detect threat in fetched remote branch');
+
+  } finally {
+    fs.rmSync(remoteRoot, { recursive: true, force: true });
+    fs.rmSync(localRoot, { recursive: true, force: true });
   }
 }
 
@@ -276,6 +346,7 @@ async function runAllTests() {
   testPropagationScript();
   testWorkingTreeCoverage();
   testRemoteTrackingRefCoverage();
+  testFetchRemoteRefs();
   testBranchOverviewReport();
   await testSafeRulesPreferences();
   testExtensionAuditor();
