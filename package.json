@@ -82,7 +82,7 @@
 			},
 			{
 				"command": "guardian.auditExtensions",
-				"title": "Guardian: Audit Installed Extensions for Malware"
+				"title": "Guardian: Scan Installed Extensions for Malware"
 			}
 		]
 	},

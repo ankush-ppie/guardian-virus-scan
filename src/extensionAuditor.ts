@@ -534,9 +534,37 @@ export async function auditInstalledExtensions(
   };
 }
 
+function getCliCandidates(): string[] {
+  const candidates: string[] = [];
+
+  // Try editor appRoot bin
+  if (vscode && vscode.env && (vscode.env as any).appRoot) {
+    const appRoot = (vscode.env as any).appRoot;
+    candidates.push(path.join(appRoot, 'bin', 'antigravity-ide'));
+    candidates.push(path.join(appRoot, 'bin', 'code'));
+    candidates.push(path.join(appRoot, 'bin', 'cursor'));
+    candidates.push(path.join(appRoot, 'bin', 'codium'));
+    candidates.push(path.join(appRoot, 'bin', 'code-insiders'));
+  }
+
+  // macOS standard application paths
+  if (process.platform === 'darwin') {
+    candidates.push('/Applications/Antigravity IDE.app/Contents/Resources/app/bin/antigravity-ide');
+    candidates.push('/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code');
+    candidates.push('/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders');
+    candidates.push('/Applications/Cursor.app/Contents/Resources/app/bin/cursor');
+    candidates.push('/Applications/VSCodium.app/Contents/Resources/app/bin/codium');
+  }
+
+  // Fallback to names in PATH
+  candidates.push('antigravity-ide', 'code', 'cursor', 'codium', 'code-insiders');
+
+  return candidates;
+}
+
 /**
  * Uninstall an extension by ID.
- * Tries VS Code API command, CLI fallback, and directory removal fallback.
+ * Tries all discovered editor CLIs, updates .obsolete, and purges extension files.
  */
 export async function uninstallExtension(
   extensionId: string,
@@ -545,11 +573,11 @@ export async function uninstallExtension(
   let uninstalled = false;
   let lastError: string | undefined;
 
-  // 1. Try VS Code command
+  // 1. Try VS Code command API
   try {
-    if (vscode && vscode.extensions) {
-      const ext = vscode.extensions.getExtension(extensionId);
-      if (ext && vscode.commands) {
+    if (vscode && vscode.commands) {
+      const ext = (vscode.extensions && vscode.extensions.getExtension) ? vscode.extensions.getExtension(extensionId) : undefined;
+      if (ext) {
         await vscode.commands.executeCommand('workbench.extensions.uninstallExtension', ext);
         uninstalled = true;
       }
@@ -558,40 +586,53 @@ export async function uninstallExtension(
     lastError = e?.message;
   }
 
-  // 2. Try CLI `code --uninstall-extension <id>`
-  if (!uninstalled) {
+  // 2. Try CLI `--uninstall-extension <id>` across available editor binaries
+  const cliBins = getCliCandidates();
+  for (const bin of cliBins) {
+    if (bin.includes(path.sep) && !fs.existsSync(bin)) continue;
     try {
       await new Promise<void>((resolve, reject) => {
-        execFile('code', ['--uninstall-extension', extensionId], (err) => {
-          if (!err) {
+        execFile(bin, ['--uninstall-extension', extensionId], { timeout: 8000 }, (err, stdout, stderr) => {
+          const out = `${stdout || ''} ${stderr || ''}`.toLowerCase();
+          if (!err || out.includes('successfully uninstalled') || out.includes('uninstalled')) {
             uninstalled = true;
             resolve();
           } else {
-            // Try cursor CLI as well
-            execFile('cursor', ['--uninstall-extension', extensionId], (err2) => {
-              if (!err2) {
-                uninstalled = true;
-                resolve();
-              } else {
-                reject(err || err2);
-              }
-            });
+            reject(err || new Error(stderr || 'CLI failed'));
           }
         });
       });
+      if (uninstalled) break;
     } catch (e: any) {
       lastError = e?.message;
     }
   }
 
-  // 3. Filesystem removal fallback if path is specified and in an extensions directory
-  if (!uninstalled && extensionPath && fs.existsSync(extensionPath)) {
+  // 3. Clean up directory and register in .obsolete file
+  if (extensionPath && fs.existsSync(extensionPath)) {
     const norm = path.normalize(extensionPath);
     const standardDirs = getStandardExtensionDirs().map(d => path.normalize(d));
     const isUnderStandardDir = standardDirs.some(dir => norm.startsWith(dir + path.sep));
 
     if (isUnderStandardDir) {
       try {
+        const extensionsDir = path.dirname(extensionPath);
+        const folderName = path.basename(extensionPath);
+        const obsoleteFile = path.join(extensionsDir, '.obsolete');
+
+        // Update .obsolete file so the IDE recognizes the extension as removed
+        try {
+          let obsoleteMap: Record<string, boolean> = {};
+          if (fs.existsSync(obsoleteFile)) {
+            try {
+              obsoleteMap = JSON.parse(fs.readFileSync(obsoleteFile, 'utf8'));
+            } catch {}
+          }
+          obsoleteMap[folderName] = true;
+          fs.writeFileSync(obsoleteFile, JSON.stringify(obsoleteMap, null, 2), 'utf8');
+        } catch {}
+
+        // Remove the extension directory
         fs.rmSync(extensionPath, { recursive: true, force: true });
         uninstalled = true;
       } catch (e: any) {
@@ -603,7 +644,7 @@ export async function uninstallExtension(
   if (uninstalled) {
     return {
       success: true,
-      message: `Extension "${extensionId}" has been removed. Reload window to apply changes.`,
+      message: `Extension "${extensionId}" has been uninstalled. Reload window to apply changes.`,
     };
   }
 

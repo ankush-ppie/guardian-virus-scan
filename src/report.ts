@@ -335,109 +335,123 @@ function buildAuditSection(audit?: ExtensionAuditReport): string {
   const isMalicious = maliciousCount > 0;
   const defaultFilter = userCount > 0 ? 'user' : 'all';
 
-  let contentHtml = '';
-
   if (!hasAudit) {
-    contentHtml = `
-      <div class="audit-initial-card" id="audit-initial-card">
-        <div class="audit-initial-content">
-          <div class="audit-initial-icon">⚡</div>
-          <div class="audit-initial-info">
-            <div class="audit-initial-title">Supply-Chain & Extension Defense</div>
-            <div class="audit-initial-desc">Analyze installed VS Code & editor extensions against 418+ known malicious extension IDs (GlassWorm, ForceMemo, Sleeper-73) and invisible-Unicode payload patterns.</div>
-          </div>
-        </div>
-        <button class="audit-start-btn" id="btn-audit-start" onclick="triggerExtensionAudit()">
-          <span class="btn-icon">🔍</span> Audit Extensions
-        </button>
-      </div>
-    `;
-  } else {
-    const summaryBanner = isMalicious
-      ? `
-      <div class="audit-summary-banner danger" id="audit-summary-banner">
-        <div class="asb-left">
-          <span class="asb-icon">🚨</span>
-          <div>
-            <div class="asb-title">${maliciousCount} Malicious Extension${maliciousCount !== 1 ? 's' : ''} Detected!</div>
-            <div class="asb-sub">Matched active malware supply-chain blocklists or contain invisible-Unicode payload markers. Remove them immediately.</div>
-          </div>
-        </div>
-        <div class="asb-actions">
-          <button class="remove-all-btn" id="btn-remove-all-malicious" onclick="uninstallAllMalicious()">
-            <span class="btn-icon">🗑️</span> Remove All (${maliciousCount})
-          </button>
-          <button class="audit-rescan-btn" onclick="triggerExtensionAudit()">
-            <span class="btn-icon">↺</span> Re-Audit
-          </button>
-        </div>
-      </div>`
-      : `
-      <div class="audit-summary-banner clean" id="audit-summary-banner">
-        <div class="asb-left">
-          <span class="asb-icon">✅</span>
-          <div>
-            <div class="asb-title">All ${totalAudited} Installed Extension${totalAudited !== 1 ? 's' : ''} Verified Clean</div>
-            <div class="asb-sub">${userCount} User-Installed · ${builtinCount} Built-in System Extensions · Scanned against 418+ GlassWorm supply-chain signatures & deep invisible Unicode heuristics.</div>
-          </div>
-        </div>
-        <div class="asb-actions">
-          <button class="audit-rescan-btn" onclick="triggerExtensionAudit()">
-            <span class="btn-icon">↺</span> Re-Audit
-          </button>
-        </div>
-      </div>`;
-
-    const extensionCards = audit.extensions.map(ext => buildExtensionCard(ext, defaultFilter)).join('');
-
-    contentHtml = `
-      <div class="audit-results-wrapper" id="audit-results-wrapper">
-        ${summaryBanner}
-        <div class="ext-filter-bar">
-          <div class="ext-filter-tags">
-            <button class="ext-filter-tag ext-filter-tag-user ${defaultFilter === 'user' ? 'active' : ''}" data-filter="user" onclick="handleExtFilterClick(this)">📦 User Installed <span class="tag-count" id="ext-count-user">(${userCount})</span></button>
-            <button class="ext-filter-tag ext-filter-tag-builtin" data-filter="builtin" onclick="handleExtFilterClick(this)">⚙️ Built-in <span class="tag-count" id="ext-count-builtin">(${builtinCount})</span></button>
-            <button class="ext-filter-tag ${defaultFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="handleExtFilterClick(this)">All <span class="tag-count" id="ext-count-all">(${totalAudited})</span></button>
-            <button class="ext-filter-tag ext-filter-tag-malicious ${isMalicious ? 'has-threats' : ''}" data-filter="malicious" onclick="handleExtFilterClick(this)">🔴 Infected <span class="tag-count" id="ext-count-malicious">(${maliciousCount})</span></button>
-            <button class="ext-filter-tag ext-filter-tag-clean" data-filter="clean" onclick="handleExtFilterClick(this)">✅ Clean <span class="tag-count" id="ext-count-clean">(${cleanCount})</span></button>
-          </div>
-          <div class="ext-search-box">
-            <span class="ext-search-icon">🔍</span>
-            <input type="text" class="ext-search-input" id="ext-search-input" placeholder="Filter by extension name, ID, or publisher..." oninput="searchExtensions(this.value)" />
-          </div>
-        </div>
-        <div class="ext-cards-list" id="ext-cards-list">
-          ${extensionCards}
-          <div id="ext-filter-empty-state" class="ext-filter-empty-state" style="${totalAudited === 0 ? 'display:block;' : 'display:none;'}">
-            <div class="ext-empty-icon">🔍</div>
-            <div class="ext-empty-title" id="ext-empty-msg">No extensions found matching your filter.</div>
-            <button class="ext-reset-btn" onclick="clearExtSearchAndFilter()">Reset Filters</button>
+    return `
+      <div id="extension-audit-container">
+        <div class="branches-section">
+          <div class="audit-initial-card" id="audit-initial-card">
+            <div class="audit-initial-content">
+              <div class="audit-initial-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              </div>
+              <div class="audit-initial-info">
+                <div class="audit-initial-title">Supply-Chain Security &amp; Extension Scan</div>
+                <div class="audit-initial-desc">Analyze installed extensions against 418+ known malware supply-chain IDs and invisible-Unicode payloads.</div>
+              </div>
+            </div>
+            <button class="audit-start-btn" id="btn-audit-start" onclick="triggerExtensionAudit()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              Scan Extensions
+            </button>
           </div>
         </div>
       </div>
     `;
   }
 
+  const summaryBanner = isMalicious
+    ? `
+    <div class="summary-hero danger" id="audit-summary-banner">
+      <div class="hero-left">
+        <div class="hero-icon">🚨</div>
+        <div class="hero-text">
+          <div class="hero-title">${maliciousCount} Malicious Extension${maliciousCount !== 1 ? 's' : ''} Detected!</div>
+          <div class="hero-sub">Matched active malware supply-chain blocklists or contain invisible-Unicode payload markers. Remove them immediately.</div>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="remove-all-btn" id="btn-remove-all-malicious" onclick="uninstallAllMalicious()">
+          <span class="btn-icon">🗑️</span> Remove All (${maliciousCount})
+        </button>
+        <button class="hero-rescan-btn" onclick="triggerExtensionAudit()" title="Re-scan extensions">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Re-Scan
+        </button>
+      </div>
+    </div>`
+    : `
+    <div class="summary-hero ok" id="audit-summary-banner">
+      <div class="hero-left">
+        <div class="hero-check-circle">✓</div>
+        <div class="hero-text">
+          <div class="hero-title">All installed extensions are clean</div>
+          <div class="hero-sub">Scanned ${totalAudited} extensions (${userCount} User · ${builtinCount} Built-in) — no malicious packages or supply-chain threats detected.</div>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="hero-rescan-btn" onclick="triggerExtensionAudit()" title="Re-scan extensions">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Re-Scan
+        </button>
+      </div>
+    </div>`;
+
+  const extensionCards = audit.extensions.map(ext => buildExtensionCard(ext, defaultFilter)).join('');
+
   return `
-  <div class="audit-section" id="audit-section">
-    <div class="audit-header">
-      <div class="audit-header-left">
-        <div class="audit-header-icon">🛡️</div>
-        <div>
-          <div class="audit-header-title">Supply-Chain Security & Extension Audit</div>
-          <div class="audit-header-sub">Verify installed extensions against 418+ malware signatures, ForceMemo markers, and invisible Unicode payloads.</div>
+    <div id="extension-audit-container">
+      ${summaryBanner}
+      <div class="branches-section" id="audit-results-wrapper">
+        <div class="branches-toolbar">
+          <div class="branches-toolbar-left">
+            <span class="branches-toolbar-title">Supply-Chain Security &amp; Extension Scan</span>
+            <span class="branches-filter-count" id="ext-filter-count">Showing all ${totalAudited} extensions</span>
+          </div>
+          <div class="branches-filter-controls">
+            <div class="filter-group">
+              <span class="filter-group-label">Type:</span>
+              <div class="filter-group-buttons">
+                <button class="filter-tag ${defaultFilter === 'user' ? 'active' : ''}" data-filter="user" onclick="handleExtFilterClick(this)">📦 User <span class="tag-count" id="ext-count-user">(${userCount})</span></button>
+                <button class="filter-tag" data-filter="builtin" onclick="handleExtFilterClick(this)">⚙️ Built-in <span class="tag-count" id="ext-count-builtin">(${builtinCount})</span></button>
+                <button class="filter-tag ${defaultFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="handleExtFilterClick(this)">All <span class="tag-count" id="ext-count-all">(${totalAudited})</span></button>
+              </div>
+            </div>
+            <div class="filter-group">
+              <span class="filter-group-label">Status:</span>
+              <div class="filter-group-buttons">
+                <button class="filter-tag filter-tag-infected ${isMalicious ? 'active' : ''}" data-filter="malicious" onclick="handleExtFilterClick(this)">🔴 Infected <span class="tag-count" id="ext-count-malicious">(${maliciousCount})</span></button>
+                <button class="filter-tag filter-tag-clean" data-filter="clean" onclick="handleExtFilterClick(this)">✅ Clean <span class="tag-count" id="ext-count-clean">(${cleanCount})</span></button>
+              </div>
+            </div>
+            <div class="ext-search-box">
+              <span class="ext-search-icon">🔍</span>
+              <input type="text" class="ext-search-input" id="ext-search-input" placeholder="Search extensions..." oninput="searchExtensions(this.value)" />
+            </div>
+          </div>
+        </div>
+        <div class="ext-cards-list" id="ext-cards-list">
+          ${extensionCards}
+          <div id="ext-filter-empty-state" class="ext-filter-empty-state" style="${totalAudited === 0 ? 'display:flex;' : 'display:none;'}">
+            <div class="empty-state-icon-box">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </div>
+            <div class="empty-state-title" id="ext-empty-msg">No extensions found matching your filter.</div>
+            <div class="empty-state-sub" id="ext-empty-sub">Check your search query or reset the filters to view installed extensions.</div>
+            <button class="ext-reset-btn" onclick="clearExtSearchAndFilter()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              Reset Filters
+            </button>
+          </div>
         </div>
       </div>
     </div>
-    <div id="extension-audit-container">
-      ${contentHtml}
-    </div>
-  </div>`;
+  `;
 }
 
 function buildExtensionCard(ext: AuditedExtension, activeFilter: string = 'user'): string {
   const isMalicious = ext.status === 'malicious';
   const isBuiltin = !!ext.isBuiltin;
+  const isSelf = ext.id.toLowerCase().includes('guardian-virus-scan') || ext.id.toLowerCase() === 'ankushlokhande.guardian-virus-scan';
   const initial = (ext.displayName || ext.id).charAt(0).toUpperCase();
   const safeId = ext.id.replace(/[^a-zA-Z0-9]/g, '_');
 
@@ -465,14 +479,14 @@ function buildExtensionCard(ext: AuditedExtension, activeFilter: string = 'user'
           <span class="btn-icon">🗑️</span> Uninstall Extension
         </button>
       </div>`
-    : isBuiltin
+    : (isBuiltin || isSelf)
       ? `
       <div class="ext-card-actions">
-        <span class="badge badge-green">✓ Clean</span>
+        <span class="badge badge-clean-outline"><span class="badge-icon-check">✓</span> Clean</span>
       </div>`
       : `
       <div class="ext-card-actions">
-        <span class="badge badge-green">✓ Clean</span>
+        <span class="badge badge-clean-outline"><span class="badge-icon-check">✓</span> Clean</span>
         <button class="ext-uninstall-btn" id="btn-uninstall-${safeId}" data-ext-id="${escHtml(ext.id)}" data-ext-path="${escHtml((ext.extensionPath || '').replace(/\\/g, '\\\\'))}" onclick="uninstallExtensionFromBtn(this)">
           <span class="btn-icon">🗑️</span> Uninstall
         </button>
@@ -776,13 +790,14 @@ export function buildReportHtml(
        STAT TABS  (Top of active tab)
     ───────────────────────────────────────────── */
     .stat-tabs {
-      display: grid;
-      grid-template-columns: repeat(8, 1fr);
+      display: flex;
+      flex-direction: row;
       border-bottom: 1px solid var(--border);
       background: #0f141d;
       padding: 0;
     }
     .stat-tab {
+      flex: 1 1 0;
       padding: 14px 18px;
       border-right: 1px solid var(--border);
       display: flex; flex-direction: column;
@@ -1020,18 +1035,64 @@ export function buildReportHtml(
     .tag-count {
       font-size: 10px; font-weight: 700; opacity: 0.85; margin-left: 2px;
     }
-    .filter-empty-state {
-      display: none; padding: 28px 16px; text-align: center;
-      color: var(--text3); font-size: 12px;
-      background: var(--bg2); border: 1px dashed var(--border); border-radius: 8px;
+    /* Empty state styling */
+    .filter-empty-state,
+    .ext-filter-empty-state {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 38px 24px;
+      background: #0d121a;
+      border: 1px dashed #1e2838;
+      border-radius: 10px;
       margin: 16px 0;
+      gap: 4px;
     }
-    .filter-reset-btn {
-      margin-top: 8px; background: transparent; border: 1px solid var(--blue);
-      color: var(--blue); border-radius: 4px; padding: 3px 10px;
-      font-size: 11px; font-weight: 600; cursor: pointer;
+    .empty-state-icon-box {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: #141b27;
+      border: 1px solid #1e2838;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 8px;
     }
-    .filter-reset-btn:hover { background: rgba(56, 189, 248, 0.1); }
+    .empty-state-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.4;
+    }
+    .empty-state-sub {
+      font-size: 11.5px;
+      color: var(--text3);
+      margin-bottom: 8px;
+    }
+    .filter-reset-btn,
+    .ext-reset-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #161f2e;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      color: #38bdf8;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .filter-reset-btn:hover,
+    .ext-reset-btn:hover {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: #38bdf8;
+      transform: translateY(-1px);
+    }
 
     /* Branch row type tag */
     .branch-scope-tag {
@@ -1404,285 +1465,224 @@ export function buildReportHtml(
     }
 
     /* ─────────────────────────────────────────────
-       AUDIT SECTION & EXTENSION SCANNER
+       TAB 2: EXTENSION AUDIT STYLING
     ───────────────────────────────────────────── */
-    .audit-section {
-      margin: 16px 28px 0;
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 12px;
+    /* Terminal / CMD Live Scanner Console */
+    .scanner-console {
+      background: #0b0f17;
+      border: 1px solid #1e2633;
+      border-radius: 10px;
+      margin-top: 6px;
+      overflow: hidden;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
+    }
+    .console-header {
+      background: #111622;
+      border-bottom: 1px solid #1e2633;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .console-dots {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .console-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot-red { background: #ef4444; }
+    .dot-yellow { background: #f59e0b; }
+    .dot-green { background: #10b981; }
+    .console-title {
+      font-size: 11px;
+      color: #94a3b8;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .console-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: 0.05em;
+    }
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #38bdf8;
+      box-shadow: 0 0 8px #38bdf8;
+      animation: pulseGlow 1.2s infinite ease-in-out;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { transform: scale(0.8); opacity: 0.5; }
+      50% { transform: scale(1.3); opacity: 1; }
+    }
+    .console-body {
       padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .console-log-line {
+      font-size: 11.5px;
+      line-height: 1.5;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .log-info { color: #64748b; }
+    .log-active { color: #e2e8f0; font-weight: 600; }
+    .log-prompt { color: #38bdf8; font-weight: 700; }
+    .console-cursor {
+      display: inline-block;
+      color: #38bdf8;
+      margin-left: 3px;
+      animation: blinkCursor 0.9s infinite step-start;
+    }
+    @keyframes blinkCursor {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .console-progress-container {
+      margin-top: 6px;
+      background: #111622;
+      border: 1px solid #1e2633;
+      border-radius: 6px;
+      padding: 10px 14px;
+    }
+    .console-progress-track {
+      width: 100%;
+      height: 6px;
+      background: #18202e;
+      border-radius: 4px;
       overflow: hidden;
-      transition: all 0.2s ease;
+      margin-bottom: 8px;
     }
-    .audit-header {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 16px; flex-wrap: wrap;
-    }
-    .audit-header-left {
-      display: flex; align-items: center; gap: 12px;
-    }
-    .audit-header-icon {
-      font-size: 20px;
-      width: 40px; height: 40px;
-      display: flex; align-items: center; justify-content: center;
-      background: rgba(96, 165, 250, 0.1);
-      border: 1px solid rgba(96, 165, 250, 0.25);
-      border-radius: 10px;
-      flex-shrink: 0;
-    }
-    .audit-header-title {
-      font-size: 13px; font-weight: 700; color: var(--text);
-      letter-spacing: -0.01em; text-transform: uppercase;
-    }
-    .audit-header-sub {
-      font-size: 11px; color: var(--text2); margin-top: 2px;
-    }
-    .audit-header-buttons {
-      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
-    }
-    .audit-action-btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: var(--vscode-button-background, #0e639c);
-      color: var(--vscode-button-foreground, #ffffff);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      padding: 6px 14px; border-radius: 7px;
-      font-size: 12px; font-weight: 600; cursor: pointer;
-      transition: all 0.15s ease;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    }
-    .audit-action-btn:hover {
-      background: var(--vscode-button-hoverBackground, #1177bb);
-      transform: translateY(-1px);
-    }
-    .audit-action-btn.is-scanning {
-      opacity: 0.7; pointer-events: none;
-    }
-
-    .audit-initial-card {
-      margin-top: 14px;
-      padding: 24px 20px;
-      background: var(--bg3);
-      border: 1px dashed var(--border2);
-      border-radius: 10px;
-      display: flex; flex-direction: column; align-items: center; text-align: center;
-      gap: 16px;
-    }
-    .audit-initial-content {
-      display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 620px;
-    }
-    .audit-initial-icon { font-size: 26px; }
-    .audit-initial-title { font-size: 13px; font-weight: 700; color: var(--text); }
-    .audit-initial-desc { font-size: 12px; color: var(--text2); line-height: 1.5; }
-    .audit-start-btn {
-      display: inline-flex; align-items: center; gap: 8px;
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
-      color: #ffffff; border: 1px solid rgba(255,255,255,0.2);
-      padding: 8px 20px; border-radius: 8px;
-      font-size: 12px; font-weight: 600; cursor: pointer;
-      transition: all 0.15s ease; white-space: nowrap;
-      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
-    }
-    .audit-start-btn:hover {
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.45);
-    }
-
-    /* Scanner Animation View */
-    .scanner-box {
-      margin-top: 14px;
-      padding: 24px;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      text-align: center;
-      position: relative;
-      overflow: hidden;
-    }
-    .radar-wrapper {
-      position: relative;
-      width: 70px; height: 70px;
-      margin: 0 auto 12px;
-    }
-    .radar-circle {
-      position: absolute; inset: 0;
-      border-radius: 50%;
-      border: 2px solid rgba(59, 130, 246, 0.3);
-      animation: radarPulse 2s ease-out infinite;
-    }
-    .radar-circle:nth-child(2) { animation-delay: 0.6s; }
-    .radar-circle:nth-child(3) { animation-delay: 1.2s; }
-    .radar-sweep {
-      position: absolute; inset: 6px;
-      border-radius: 50%;
-      background: conic-gradient(from 0deg at 50% 50%, rgba(59, 130, 246, 0.45) 0deg, transparent 90deg, transparent 360deg);
-      animation: radarSpin 1.4s linear infinite;
-    }
-    .radar-center-dot {
-      position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 10px; height: 10px; border-radius: 50%;
-      background: var(--blue);
-      box-shadow: 0 0 10px var(--blue);
-    }
-    @keyframes radarSpin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-    @keyframes radarPulse {
-      0% { transform: scale(0.6); opacity: 1; }
-      100% { transform: scale(1.3); opacity: 0; }
-    }
-    .scanner-title {
-      font-size: 14px; font-weight: 700; color: var(--text);
-      letter-spacing: -0.01em; margin-bottom: 4px;
-    }
-    .scanner-ticker {
-      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-      font-size: 11px; color: var(--text2);
-      margin-bottom: 12px; min-height: 16px;
-    }
-    .scanner-progress-bar {
-      width: 100%; max-width: 480px; height: 6px;
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: 4px; margin: 0 auto 16px; overflow: hidden;
-    }
-    .scanner-progress-fill {
-      height: 100%; width: 0%;
-      background: linear-gradient(90deg, #3b82f6, #06b6d4, #10b981);
+    .console-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #2563eb, #38bdf8, #34d399);
+      border-radius: 4px;
       transition: width 0.15s ease;
     }
-    .scanner-steps {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 8px; max-width: 800px; margin: 0 auto; text-align: left;
+    .console-progress-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #94a3b8;
     }
-    .scanner-step {
-      font-size: 10px; color: var(--text3);
-      background: var(--bg2); padding: 7px 11px;
-      border-radius: 6px; border: 1px solid var(--border);
-      display: flex; align-items: center; gap: 6px;
+    .console-pct {
+      font-weight: 700;
+      color: #38bdf8;
     }
-    .scanner-step.active {
-      color: var(--blue); border-color: rgba(59, 130, 246, 0.4);
-      background: rgba(59, 130, 246, 0.08); font-weight: 600;
+    .console-steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+      margin-top: 4px;
     }
-    .scanner-step.done {
-      color: var(--green); border-color: rgba(74, 222, 128, 0.3);
-      background: rgba(74, 222, 128, 0.06); font-weight: 600;
+    .console-step {
+      font-size: 10.5px;
+      color: #64748b;
+      background: #111622;
+      border: 1px solid #1e2633;
+      border-radius: 6px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
+    .console-step.active {
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.4);
+      background: rgba(56, 189, 248, 0.08);
+      font-weight: 600;
+    }
+    .console-step.done {
+      color: #4ade80;
+      border-color: rgba(74, 222, 128, 0.3);
+      background: rgba(74, 222, 128, 0.06);
+      font-weight: 600;
+    }
+    .step-check { font-size: 11px; }
 
-    /* Results View */
-    .audit-results-wrapper { margin-top: 14px; }
-    .audit-summary-banner {
-      padding: 14px 18px; border-radius: 10px;
+    .audit-initial-card {
+      background: #11161e; border: 1px solid #1d2533;
+      border-radius: 10px; padding: 24px; margin-top: 16px; margin-bottom: 16px;
       display: flex; align-items: center; justify-content: space-between;
-      gap: 16px; margin-bottom: 14px; flex-wrap: wrap;
+      gap: 20px; flex-wrap: wrap;
     }
-    .audit-summary-banner.danger {
-      background: var(--bg-red-soft); border: 1px solid var(--border-red);
+    .audit-initial-content { display: flex; align-items: center; gap: 16px; max-width: 700px; }
+    .audit-initial-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      background: #161d28; border: 1px solid #242f40;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
     }
-    .audit-summary-banner.clean {
-      background: var(--bg-green-soft); border: 1px solid rgba(74, 222, 128, 0.25);
+    .audit-initial-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+    .audit-initial-desc { font-size: 12px; color: var(--text2); line-height: 1.45; }
+    .audit-start-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #2563eb; color: #ffffff;
+      border: 1px solid #2563eb; padding: 8px 18px;
+      border-radius: 8px; font-size: 12.5px; font-weight: 600;
+      cursor: pointer; transition: all 0.12s ease;
     }
-    .asb-left { display: flex; align-items: center; gap: 12px; }
-    .asb-icon { font-size: 24px; }
-    .asb-title { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
-    .audit-summary-banner.danger .asb-title { color: var(--red); }
-    .audit-summary-banner.clean .asb-title { color: var(--green); }
-    .asb-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
-    .asb-actions { display: flex; align-items: center; gap: 8px; }
+    .audit-start-btn:hover { background: #1d4ed8; border-color: #1d4ed8; }
+
     .remove-all-btn {
       display: inline-flex; align-items: center; gap: 6px;
-      background: linear-gradient(135deg, #dc2626, #b91c1c);
-      color: #ffffff; border: 1px solid rgba(255,255,255,0.25);
-      padding: 6px 14px; border-radius: 6px;
-      font-size: 11px; font-weight: 700; cursor: pointer;
-      transition: all 0.15s ease;
+      background: #dc2626; color: #ffffff;
+      border: 1px solid #dc2626; padding: 6px 14px;
+      border-radius: 8px; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: all 0.12s ease;
+      white-space: nowrap;
     }
-    .remove-all-btn:hover {
-      background: linear-gradient(135deg, #ef4444, #dc2626);
-      transform: translateY(-1px);
-      box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);
-    }
-    .audit-rescan-btn {
-      display: inline-flex; align-items: center; gap: 5px;
-      background: var(--vscode-button-secondaryBackground, #3a3d3e);
-      color: var(--vscode-button-secondaryForeground, #ffffff);
-      border: 1px solid var(--border);
-      padding: 6px 12px; border-radius: 6px;
-      font-size: 11px; font-weight: 600; cursor: pointer;
-      transition: all 0.12s;
-    }
-    .audit-rescan-btn:hover {
-      background: var(--vscode-button-secondaryHoverBackground, #45494a);
-    }
+    .remove-all-btn:hover { background: #ef4444; border-color: #ef4444; }
 
-    .ext-filter-bar {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 12px; margin-bottom: 12px; flex-wrap: wrap;
-    }
-    .ext-filter-tags { display: flex; align-items: center; gap: 5px; }
-    .ext-filter-tag {
-      font-size: 11px; font-weight: 600;
-      padding: 4px 10px; border-radius: 6px;
-      background: var(--bg3); color: var(--text2);
-      border: 1px solid var(--border);
-      cursor: pointer; transition: all 0.12s;
-      display: inline-flex; align-items: center; gap: 4px;
-    }
-    .ext-filter-tag:hover { background: var(--border); color: var(--text); }
-    .ext-filter-tag.active {
-      background: var(--vscode-button-background, #0e639c);
-      color: #ffffff; border-color: var(--vscode-button-background, #0e639c);
-    }
-    .ext-filter-tag.ext-filter-tag-user.active {
-      background: var(--vscode-button-background, #0e639c); color: #ffffff; border-color: var(--vscode-button-background, #0e639c);
-    }
-    .ext-filter-tag.ext-filter-tag-builtin.active {
-      background: #475569; color: #ffffff; border-color: #475569;
-    }
-    .ext-filter-tag.ext-filter-tag-malicious.active {
-      background: var(--red); color: #ffffff; border-color: var(--red);
-    }
-    .ext-filter-tag.ext-filter-tag-clean.active {
-      background: #16a34a; color: #ffffff; border-color: #16a34a;
-    }
-    .ext-filter-tag.has-threats {
-      border-color: var(--border-red); color: var(--red);
-    }
     .ext-search-box {
       display: flex; align-items: center; gap: 6px;
-      background: var(--bg3); border: 1px solid var(--border);
-      border-radius: 6px; padding: 3px 8px;
+      background: #131922; border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 10px;
     }
     .ext-search-icon { font-size: 11px; color: var(--text3); }
     .ext-search-input {
       background: transparent; border: none; color: var(--text);
-      font-size: 11px; outline: none; width: 230px;
+      font-size: 11.5px; outline: none; width: 220px;
     }
     .ext-search-input::placeholder { color: var(--text3); }
 
-    .ext-cards-list { display: flex; flex-direction: column; gap: 8px; }
+    .ext-cards-list { display: flex; flex-direction: column; gap: 6px; }
     .ext-card {
-      background: var(--bg3);
-      border: 1px solid var(--border);
+      background: #11161e;
+      border: 1px solid #1d2533;
       border-radius: 8px; padding: 12px 16px;
       display: flex; flex-direction: column; gap: 8px;
-      transition: all 0.15s ease;
+      transition: all 0.12s ease;
     }
+    .ext-card:hover { border-color: #263346; }
     .ext-card.malicious {
-      border-color: var(--border-red);
-      background: rgba(248, 113, 113, 0.04);
+      border-color: rgba(248, 113, 113, 0.35);
+      background: rgba(248, 113, 113, 0.03);
     }
     .ext-card.clean {
-      border-color: var(--border);
+      border-color: #1d2533;
     }
     .ext-card.is-uninstalled {
-      opacity: 0.55;
-      filter: grayscale(0.6);
-      background: var(--bg2);
-      border-color: var(--border);
+      opacity: 0.55; filter: grayscale(0.6);
+      background: var(--bg2); border-color: var(--border);
     }
     .ext-card-header {
       display: flex; align-items: flex-start; justify-content: space-between;
@@ -1693,32 +1693,31 @@ export function buildReportHtml(
       flex: 1; min-width: 0;
     }
     .ext-avatar-wrapper {
-      width: 38px; height: 38px; border-radius: 8px;
+      width: 36px; height: 36px; border-radius: 8px;
       flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-      background: var(--bg2); border: 1px solid var(--border);
-      overflow: hidden;
-      margin-top: 1px;
+      background: #161d28; border: 1px solid #242f40;
+      overflow: hidden; margin-top: 1px;
     }
     .ext-icon-img {
       width: 100%; height: 100%; object-fit: contain;
-      border-radius: 7px;
+      border-radius: 7px; display: block;
     }
     .ext-avatar {
       width: 100%; height: 100%; border-radius: 7px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 700; flex-shrink: 0;
+      font-size: 13px; font-weight: 700; flex-shrink: 0;
     }
     .avatar-malicious {
-      background: var(--bg-red-soft); color: var(--red); border: 1px solid var(--border-red);
+      background: rgba(248, 113, 113, 0.12); color: var(--red);
     }
     .avatar-user {
-      background: rgba(59, 130, 246, 0.12); color: var(--blue, #60a5fa); border: 1px solid rgba(59, 130, 246, 0.3);
+      background: #18202c; color: #38bdf8;
     }
     .avatar-builtin {
-      background: var(--bg2); color: var(--text3); border: 1px solid var(--border);
+      background: #18202c; color: var(--text3);
     }
     .avatar-clean {
-      background: var(--bg2); color: var(--text2); border: 1px solid var(--border);
+      background: #18202c; color: var(--text2);
     }
     .ext-title-box {
       display: flex; flex-direction: column; gap: 3px;
@@ -1726,77 +1725,19 @@ export function buildReportHtml(
     }
     .ext-name-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .ext-name { font-size: 13px; font-weight: 600; color: var(--text); }
-    .ext-tag-user {
-      font-size: 9px; font-weight: 700; background: rgba(59, 130, 246, 0.15);
-      color: var(--blue, #60a5fa); border: 1px solid rgba(59, 130, 246, 0.3);
-      padding: 1px 6px; border-radius: 4px; text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .ext-tag-builtin {
-      font-size: 9px; font-weight: 600; background: var(--bg2);
-      color: var(--text3); border: 1px solid var(--border);
-      padding: 1px 5px; border-radius: 4px; text-transform: uppercase;
-    }
     .ext-category-chip {
-      font-size: 9px; font-weight: 600;
-      color: var(--text3); background: var(--bg2);
-      border: 1px solid var(--border);
-      padding: 1px 6px; border-radius: 4px;
+      font-size: 9.5px; font-weight: 500;
+      color: var(--text2); background: #161d28;
+      border: 1px solid #242f40;
+      padding: 1px 7px; border-radius: 4px;
     }
-    .ext-license-chip {
-      font-size: 9px; font-weight: 700;
-      color: #10b981; background: rgba(16, 185, 129, 0.12);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      padding: 1px 5px; border-radius: 4px;
-    }
-    .ext-link-icon {
-      display: inline-flex; align-items: center; gap: 3px;
-      font-size: 10px; color: var(--text3);
-      text-decoration: none; transition: all 0.12s;
-    }
-    .ext-link-icon:hover {
-      color: var(--vscode-textLink-foreground, var(--blue));
-      text-decoration: underline;
-    }
-    .ext-core-badge {
-      display: inline-flex; align-items: center; gap: 3px;
-      font-size: 10px; font-weight: 600; color: var(--text3);
-      background: var(--bg2); border: 1px solid var(--border);
-      padding: 3px 8px; border-radius: 5px;
-    }
-    .ext-version { font-size: 10px; color: var(--text3); font-family: monospace; }
-    .ext-id-ver {
-      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-      font-size: 11px; color: var(--vscode-textLink-foreground, var(--blue));
-    }
-    .ext-publisher { color: var(--text3); font-family: -apple-system, sans-serif; font-size: 10px; }
-    .ext-desc { font-size: 11px; color: var(--text2); line-height: 1.45; word-break: break-word; }
+    .ext-desc { font-size: 11.5px; color: var(--text2); line-height: 1.45; word-break: break-word; }
     .ext-card-actions {
       margin-left: auto;
-      display: flex; align-items: center; gap: 6px;
+      display: flex; align-items: center; gap: 8px;
       flex-shrink: 0; align-self: flex-start;
       margin-top: 1px;
     }
-    .ext-filter-empty-state {
-      display: none;
-      padding: 36px 20px;
-      text-align: center;
-      background: var(--bg2);
-      border: 1px dashed var(--border);
-      border-radius: 8px;
-      margin-top: 4px;
-    }
-    .ext-empty-icon {
-      font-size: 28px;
-      margin-bottom: 8px;
-    }
-    .ext-empty-title {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text2);
-      margin-bottom: 12px;
-    }
-    .ext-reset-btn {
       background: var(--vscode-button-secondaryBackground, #3a3d3e);
       color: var(--vscode-button-secondaryForeground, #ffffff);
       border: 1px solid var(--border);
@@ -1903,12 +1844,12 @@ export function buildReportHtml(
         <span class="nav-tab-icon">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
         </span>
-        <span class="nav-tab-title">Repo Audit</span>
+        <span class="nav-tab-title">Repo Scan</span>
         ${tab1Badge}
       </button>
       <button class="nav-tab-btn ${initialTab === 'extension-audit' ? 'active' : ''}" id="tab-btn-extension-audit" data-tab="extension-audit" onclick="switchTab('extension-audit')">
         <span class="nav-tab-icon">🧩</span>
-        <span class="nav-tab-title">Extension Audit</span>
+        <span class="nav-tab-title">Extension Scan</span>
         ${tab2Badge}
       </button>
     </div>
@@ -2004,8 +1945,15 @@ export function buildReportHtml(
     </div>
 
     <div id="filter-empty-state" class="filter-empty-state">
-      <p>No branches match the selected filter.</p>
-      <button class="filter-reset-btn" onclick="resetAllFilters()">Reset filters</button>
+      <div class="empty-state-icon-box">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </div>
+      <div class="empty-state-title" id="empty-state-msg">No branches match the selected filter.</div>
+      <div class="empty-state-sub">Try changing the status or scope filters above.</div>
+      <button class="filter-reset-btn" onclick="resetAllFilters()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        Reset Filters
+      </button>
     </div>
 
     ${infectedBranches.length > 0 ? `
@@ -2075,7 +2023,7 @@ export function buildReportHtml(
     </div>
     <div class="stat-tab">
       <div class="stat-tab-val c-muted" id="ext-stat-time">${extAudit ? extAudit.scanDurationMs + 'ms' : '—'}</div>
-      <div class="stat-tab-lbl">Audit time</div>
+      <div class="stat-tab-lbl">Scan time</div>
     </div>
   </div>
 
@@ -2289,7 +2237,7 @@ export function buildReportHtml(
       if (c) c.textContent = visibleError;
     }
 
-    if (emptyState) emptyState.style.display = visibleTotal === 0 ? 'block' : 'none';
+    if (emptyState) emptyState.style.display = visibleTotal === 0 ? 'flex' : 'none';
     if (countLabel) {
       const isDefault = currentScopeFilter === 'all' && currentStatusFilter === 'all';
       countLabel.textContent = isDefault
@@ -2381,24 +2329,39 @@ export function buildReportHtml(
 
     if (container) {
       container.innerHTML = 
-        '<div class="scanner-box" id="scanner-box">' +
-          '<div class="radar-wrapper">' +
-            '<div class="radar-circle"></div>' +
-            '<div class="radar-circle"></div>' +
-            '<div class="radar-circle"></div>' +
-            '<div class="radar-sweep"></div>' +
-            '<div class="radar-center-dot"></div>' +
-          '</div>' +
-          '<div class="scanner-title">Auditing Installed Editor Extensions...</div>' +
-          '<div class="scanner-ticker" id="scanner-ticker">Initializing threat database (418 canonical GlassWorm & supply-chain IoCs)...</div>' +
-          '<div class="scanner-progress-bar">' +
-            '<div class="scanner-progress-fill" id="scanner-progress-fill" style="width: 5%"></div>' +
-          '</div>' +
-          '<div class="scanner-steps">' +
-            '<div class="scanner-step done" id="step-1"><span class="step-icon">✓</span> 1. Threat Intel Database (418 IoCs)</div>' +
-            '<div class="scanner-step active" id="step-2"><span class="step-icon">⏳</span> 2. Discovering Extensions</div>' +
-            '<div class="scanner-step" id="step-3"><span class="step-icon">○</span> 3. Deep Heuristics & Unicode Analysis</div>' +
-            '<div class="scanner-step" id="step-4"><span class="step-icon">○</span> 4. Supply-Chain Verdict</div>' +
+        '<div class="branches-section">' +
+          '<div class="scanner-console" id="scanner-console">' +
+            '<div class="console-header">' +
+              '<div class="console-dots">' +
+                '<span class="console-dot dot-red"></span>' +
+                '<span class="console-dot dot-yellow"></span>' +
+                '<span class="console-dot dot-green"></span>' +
+              '</div>' +
+              '<div class="console-title">guardian@security: ~ /scan-extensions --deep --signatures=418+</div>' +
+              '<div class="console-status"><span class="pulse-dot"></span> RUNNING SCAN</div>' +
+            '</div>' +
+            '<div class="console-body">' +
+              '<div class="console-log-line log-info"><span class="log-prompt">&gt;</span> [GUARDIAN-CORE] Initializing Extension Supply-Chain &amp; Malware Engine v1.5.0...</div>' +
+              '<div class="console-log-line log-info"><span class="log-prompt">&gt;</span> [THREAT-DB] Loaded 418+ signatures (GlassWorm, ForceMemo, Sleeper-73).</div>' +
+              '<div class="console-log-line log-active" id="console-live-line">' +
+                '<span class="log-prompt">&gt;</span> [SCANNING] <span class="console-cursor-text" id="console-curr-text">Discovering installed extensions...</span><span class="console-cursor">█</span>' +
+              '</div>' +
+              '<div class="console-progress-container">' +
+                '<div class="console-progress-track">' +
+                  '<div class="console-progress-bar" id="scanner-progress-fill" style="width: 8%"></div>' +
+                '</div>' +
+                '<div class="console-progress-meta">' +
+                  '<span id="scanner-ticker">Initializing extension runtime scan...</span>' +
+                  '<span class="console-pct" id="console-pct">8%</span>' +
+                '</div>' +
+              '</div>' +
+              '<div class="console-steps-grid">' +
+                '<div class="console-step done" id="step-1"><span class="step-check">✓</span> 1. Threat Intel (418 IoCs)</div>' +
+                '<div class="console-step active" id="step-2"><span class="step-check">⏳</span> 2. Discovering Packages</div>' +
+                '<div class="console-step" id="step-3"><span class="step-check">○</span> 3. Unicode &amp; Payload Analysis</div>' +
+                '<div class="console-step" id="step-4"><span class="step-check">○</span> 4. Supply-Chain Verdict</div>' +
+              '</div>' +
+            '</div>' +
           '</div>' +
         '</div>';
     }
@@ -2407,25 +2370,34 @@ export function buildReportHtml(
   }
 
   function updateExtensionScanProgress(progress) {
+    const liveText = document.getElementById('console-curr-text');
     const ticker = document.getElementById('scanner-ticker');
     const fill = document.getElementById('scanner-progress-fill');
+    const pctEl = document.getElementById('console-pct');
     const step2 = document.getElementById('step-2');
     const step3 = document.getElementById('step-3');
 
-    if (ticker && progress.currentExtension) {
-      ticker.textContent = '[' + progress.current + '/' + progress.total + '] Auditing: ' + progress.currentExtension + '...';
+    const pct = progress.total > 0 ? Math.min(95, Math.max(10, Math.round((progress.current / progress.total) * 100))) : 15;
+
+    if (liveText && progress.currentExtension) {
+      liveText.textContent = '[' + progress.current + '/' + progress.total + '] Checking: ' + progress.currentExtension + '...';
     }
-    if (fill && progress.total > 0) {
-      const pct = Math.min(95, Math.round((progress.current / progress.total) * 100));
+    if (ticker && progress.currentExtension) {
+      ticker.textContent = 'Scanning: ' + progress.currentExtension;
+    }
+    if (fill) {
       fill.style.width = pct + '%';
     }
+    if (pctEl) {
+      pctEl.textContent = pct + '%';
+    }
     if (step2) {
-      step2.className = 'scanner-step done';
-      step2.innerHTML = '<span class="step-icon">✓</span> 2. Extensions Discovered (' + progress.total + ')';
+      step2.className = 'console-step done';
+      step2.innerHTML = '<span class="step-check">✓</span> 2. Discovered (' + progress.total + ' Extensions)';
     }
     if (step3) {
-      step3.className = 'scanner-step active';
-      step3.innerHTML = '<span class="step-icon">⏳</span> 3. Deep Heuristics & Unicode Analysis';
+      step3.className = 'console-step active';
+      step3.innerHTML = '<span class="step-check">⏳</span> 3. Unicode &amp; Payload Analysis';
     }
   }
 
@@ -2505,36 +2477,38 @@ export function buildReportHtml(
     let summaryBanner = '';
     if (isMalicious) {
       summaryBanner = 
-        '<div class="audit-summary-banner danger" id="audit-summary-banner">' +
-          '<div class="asb-left">' +
-            '<span class="asb-icon">🚨</span>' +
-            '<div>' +
-              '<div class="asb-title">' + maliciousCount + ' Malicious Extension' + (maliciousCount !== 1 ? 's' : '') + ' Detected!</div>' +
-              '<div class="asb-sub">Matched active malware supply-chain blocklists or contain invisible-Unicode payload markers. Remove them immediately.</div>' +
+        '<div class="summary-hero danger" id="audit-summary-banner">' +
+          '<div class="hero-left">' +
+            '<div class="hero-icon">🚨</div>' +
+            '<div class="hero-text">' +
+              '<div class="hero-title">' + maliciousCount + ' Malicious Extension' + (maliciousCount !== 1 ? 's' : '') + ' Detected!</div>' +
+              '<div class="hero-sub">Matched active malware supply-chain blocklists or contain invisible-Unicode payload markers. Remove them immediately.</div>' +
             '</div>' +
           '</div>' +
-          '<div class="asb-actions">' +
+          '<div class="hero-actions">' +
             '<button class="remove-all-btn" id="btn-remove-all-malicious" onclick="uninstallAllMalicious()">' +
               '<span class="btn-icon">🗑️</span> Remove All (' + maliciousCount + ')' +
             '</button>' +
-            '<button class="audit-rescan-btn" onclick="triggerExtensionAudit()">' +
-              '<span class="btn-icon">↺</span> Re-Audit' +
+            '<button class="hero-rescan-btn" onclick="triggerExtensionAudit()" title="Re-scan extensions">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
+              'Re-Scan' +
             '</button>' +
           '</div>' +
         '</div>';
     } else {
       summaryBanner = 
-        '<div class="audit-summary-banner clean" id="audit-summary-banner">' +
-          '<div class="asb-left">' +
-            '<span class="asb-icon">✅</span>' +
-            '<div>' +
-              '<div class="asb-title">All ' + totalAudited + ' Installed Extension' + (totalAudited !== 1 ? 's' : '') + ' Verified Clean</div>' +
-              '<div class="asb-sub">' + userCount + ' User-Installed · ' + builtinCount + ' Built-in System Extensions · Scanned against 418+ GlassWorm supply-chain signatures & deep invisible Unicode heuristics.</div>' +
+        '<div class="summary-hero ok" id="audit-summary-banner">' +
+          '<div class="hero-left">' +
+            '<div class="hero-check-circle">✓</div>' +
+            '<div class="hero-text">' +
+              '<div class="hero-title">All installed extensions are clean</div>' +
+              '<div class="hero-sub">Scanned ' + totalAudited + ' extensions (' + userCount + ' User · ' + builtinCount + ' Built-in) — no malicious packages or supply-chain threats detected.</div>' +
             '</div>' +
           '</div>' +
-          '<div class="asb-actions">' +
-            '<button class="audit-rescan-btn" onclick="triggerExtensionAudit()">' +
-              '<span class="btn-icon">↺</span> Re-Audit' +
+          '<div class="hero-actions">' +
+            '<button class="hero-rescan-btn" onclick="triggerExtensionAudit()" title="Re-scan extensions">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
+              'Re-Scan' +
             '</button>' +
           '</div>' +
         '</div>';
@@ -2567,6 +2541,7 @@ export function buildReportHtml(
         threatsBox = '<div class="ext-threat-box">' + threatItems + '</div>';
       }
 
+      const isSelf = ext.id.toLowerCase().includes('guardian-virus-scan') || ext.id.toLowerCase() === 'ankushlokhande.guardian-virus-scan';
       let actionsHtml = '';
       if (isMal) {
         actionsHtml = 
@@ -2575,15 +2550,15 @@ export function buildReportHtml(
               '<span class="btn-icon">🗑️</span> Uninstall Extension' +
             '</button>' +
           '</div>';
-      } else if (isBuiltin) {
+      } else if (isBuiltin || isSelf) {
         actionsHtml = 
           '<div class="ext-card-actions">' +
-            '<span class="badge badge-green">✓ Clean</span>' +
+            '<span class="badge badge-clean-outline"><span class="badge-icon-check">✓</span> Clean</span>' +
           '</div>';
       } else {
         actionsHtml = 
           '<div class="ext-card-actions">' +
-            '<span class="badge badge-green">✓ Clean</span>' +
+            '<span class="badge badge-clean-outline"><span class="badge-icon-check">✓</span> Clean</span>' +
             '<button class="ext-uninstall-btn" id="btn-uninstall-' + safeId + '" data-ext-id="' + escText(ext.id) + '" data-ext-path="' + escText(ext.extensionPath || '') + '" onclick="uninstallExtensionFromBtn(this)">' +
               '<span class="btn-icon">🗑️</span> Uninstall' +
             '</button>' +
@@ -2622,34 +2597,54 @@ export function buildReportHtml(
     }
 
     container.innerHTML = 
-      '<div class="audit-results-wrapper" id="audit-results-wrapper">' +
-        summaryBanner +
-        '<div class="ext-filter-bar">' +
-          '<div class="ext-filter-tags">' +
-            '<button class="ext-filter-tag ext-filter-tag-user ' + (currentExtFilter === 'user' ? 'active' : '') + '" data-filter="user" onclick="handleExtFilterClick(this)">📦 User Installed <span class="tag-count" id="ext-count-user">(' + userCount + ')</span></button>' +
-            '<button class="ext-filter-tag ext-filter-tag-builtin ' + (currentExtFilter === 'builtin' ? 'active' : '') + '" data-filter="builtin" onclick="handleExtFilterClick(this)">⚙️ Built-in <span class="tag-count" id="ext-count-builtin">(' + builtinCount + ')</span></button>' +
-            '<button class="ext-filter-tag ' + (currentExtFilter === 'all' ? 'active' : '') + '" data-filter="all" onclick="handleExtFilterClick(this)">All <span class="tag-count" id="ext-count-all">(' + totalAudited + ')</span></button>' +
-            '<button class="ext-filter-tag ext-filter-tag-malicious ' + (isMalicious ? 'has-threats' : '') + '" data-filter="malicious" onclick="handleExtFilterClick(this)">🔴 Infected <span class="tag-count" id="ext-count-malicious">(' + maliciousCount + ')</span></button>' +
-            '<button class="ext-filter-tag ext-filter-tag-clean" data-filter="clean" onclick="handleExtFilterClick(this)">✅ Clean <span class="tag-count" id="ext-count-clean">(' + cleanCount + ')</span></button>' +
+      summaryBanner +
+      '<div class="branches-section" id="audit-results-wrapper">' +
+        '<div class="branches-toolbar">' +
+          '<div class="branches-toolbar-left">' +
+            '<span class="branches-toolbar-title">Supply-Chain Security &amp; Extension Scan</span>' +
+            '<span class="branches-filter-count" id="ext-filter-count">Showing all ' + totalAudited + ' extensions</span>' +
           '</div>' +
-          '<div class="ext-search-box">' +
-            '<span class="ext-search-icon">🔍</span>' +
-            '<input type="text" class="ext-search-input" id="ext-search-input" placeholder="Filter by extension name, ID, or publisher..." oninput="searchExtensions(this.value)" />' +
+          '<div class="branches-filter-controls">' +
+            '<div class="filter-group">' +
+              '<span class="filter-group-label">Type:</span>' +
+              '<div class="filter-group-buttons">' +
+                '<button class="filter-tag ' + (currentExtFilter === 'user' ? 'active' : '') + '" data-filter="user" onclick="handleExtFilterClick(this)">📦 User <span class="tag-count" id="ext-count-user">(' + userCount + ')</span></button>' +
+                '<button class="filter-tag ' + (currentExtFilter === 'builtin' ? 'active' : '') + '" data-filter="builtin" onclick="handleExtFilterClick(this)">⚙️ Built-in <span class="tag-count" id="ext-count-builtin">(' + builtinCount + ')</span></button>' +
+                '<button class="filter-tag ' + (currentExtFilter === 'all' ? 'active' : '') + '" data-filter="all" onclick="handleExtFilterClick(this)">All <span class="tag-count" id="ext-count-all">(' + totalAudited + ')</span></button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="filter-group">' +
+              '<span class="filter-group-label">Status:</span>' +
+              '<div class="filter-group-buttons">' +
+                '<button class="filter-tag filter-tag-infected ' + (isMalicious ? 'active' : '') + '" data-filter="malicious" onclick="handleExtFilterClick(this)">🔴 Infected <span class="tag-count" id="ext-count-malicious">(' + maliciousCount + ')</span></button>' +
+                '<button class="filter-tag filter-tag-clean" data-filter="clean" onclick="handleExtFilterClick(this)">✅ Clean <span class="tag-count" id="ext-count-clean">(' + cleanCount + ')</span></button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="ext-search-box">' +
+              '<span class="ext-search-icon">🔍</span>' +
+              '<input type="text" class="ext-search-input" id="ext-search-input" placeholder="Search extensions..." oninput="searchExtensions(this.value)" />' +
+            '</div>' +
           '</div>' +
         '</div>' +
         '<div class="ext-cards-list" id="ext-cards-list">' +
           cardsHtml +
-          '<div id="ext-filter-empty-state" class="ext-filter-empty-state" style="' + (report.extensions.length === 0 ? 'display:block;' : 'display:none;') + '">' +
-            '<div class="ext-empty-icon">🔍</div>' +
-            '<div class="ext-empty-title" id="ext-empty-msg">No extensions found matching your filter.</div>' +
-            '<button class="ext-reset-btn" onclick="clearExtSearchAndFilter()">Reset Filters</button>' +
+          '<div id="ext-filter-empty-state" class="ext-filter-empty-state" style="' + (totalAudited === 0 ? 'display:flex;' : 'display:none;') + '">' +
+            '<div class="empty-state-icon-box">' +
+              '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>' +
+            '</div>' +
+            '<div class="empty-state-title" id="ext-empty-msg">No extensions found matching your filter.</div>' +
+            '<div class="empty-state-sub" id="ext-empty-sub">Check your search query or reset the filters to view installed extensions.</div>' +
+            '<button class="ext-reset-btn" onclick="clearExtSearchAndFilter()">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>' +
+              'Reset Filters' +
+            '</button>' +
           '</div>' +
         '</div>' +
       '</div>';
   }
 
   function handleExtFilterClick(btn) {
-    document.querySelectorAll('.ext-filter-tag').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#tab-extension-audit .filter-tag').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     filterExtensions(btn.getAttribute('data-filter') || 'all');
   }
@@ -2705,20 +2700,26 @@ export function buildReportHtml(
 
     const emptyEl = document.getElementById('ext-filter-empty-state');
     const emptyMsgEl = document.getElementById('ext-empty-msg');
+    const emptySubEl = document.getElementById('ext-empty-sub');
     if (emptyEl) {
       if (visibleCount === 0) {
-        emptyEl.style.display = 'block';
+        emptyEl.style.display = 'flex';
         if (emptyMsgEl) {
           if (extSearchQuery) {
             emptyMsgEl.textContent = 'No extensions matching "' + extSearchQuery + '" found.';
+            if (emptySubEl) emptySubEl.textContent = 'Check your search query or click reset below.';
           } else if (currentExtFilter === 'malicious') {
             emptyMsgEl.textContent = '🛡️ No infected extensions detected — all installed extensions are clean!';
+            if (emptySubEl) emptySubEl.textContent = 'Switch to "User" or "All" to inspect your extension inventory.';
           } else if (currentExtFilter === 'user') {
             emptyMsgEl.textContent = 'No user-installed extensions found.';
+            if (emptySubEl) emptySubEl.textContent = 'Switch to "All" or "Built-in" to inspect installed packages.';
           } else if (currentExtFilter === 'builtin') {
             emptyMsgEl.textContent = 'No built-in system extensions found.';
+            if (emptySubEl) emptySubEl.textContent = 'Switch to "User" or "All" to inspect installed packages.';
           } else {
             emptyMsgEl.textContent = 'No extensions found matching your filter.';
+            if (emptySubEl) emptySubEl.textContent = 'Reset your filter selection to view all extensions.';
           }
         }
       } else {
@@ -2731,9 +2732,9 @@ export function buildReportHtml(
     const input = document.getElementById('ext-search-input');
     if (input) input.value = '';
     extSearchQuery = '';
-    const allBtn = document.querySelector('.ext-filter-tag[data-filter="all"]');
+    const allBtn = document.querySelector('#tab-extension-audit .filter-tag[data-filter="all"]');
     if (allBtn) {
-      document.querySelectorAll('.ext-filter-tag').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#tab-extension-audit .filter-tag').forEach(b => b.classList.remove('active'));
       allBtn.classList.add('active');
       currentExtFilter = 'all';
     }

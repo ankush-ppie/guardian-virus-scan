@@ -495,7 +495,7 @@ export function activate(context: vscode.ExtensionContext) {
           }
         } else {
           const emptyResult: WorkspaceScanResult = {
-            workspacePath: 'Extension Supply-Chain Audit',
+            workspacePath: 'Extension Supply-Chain Scan',
             projectType: 'generic',
             branches: [],
             scanDurationMs: 0,

@@ -388,13 +388,23 @@ function testExtensionAuditor() {
                     status: 'clean',
                     threats: [],
                 },
+                {
+                    id: 'ankushlokhande.guardian-virus-scan',
+                    displayName: 'Guardian — Glassworm & Malware Scanner',
+                    version: '1.5.0',
+                    publisher: 'ankushlokhande',
+                    extensionPath: '/mock/extensions/ankushlokhande.guardian-virus-scan-1.5.0',
+                    isBuiltin: false,
+                    status: 'clean',
+                    threats: [],
+                },
             ],
             scanDurationMs: 120,
             timestamp: Date.now(),
         },
     };
     const html = (0, report_1.buildReportHtml)(scanResultWithAudit);
-    assert.ok(html.includes('Supply-Chain Security & Extension Audit'), 'Should render Audit section title');
+    assert.ok(html.includes('Supply-Chain Security &amp; Extension Scan') || html.includes('Supply-Chain Security & Extension Scan'), 'Should render Scan section title');
     assert.ok(html.includes('1 Malicious Extension Detected!'), 'Should render malicious extension banner');
     assert.ok(html.includes('Remove All (1)'), 'Should render Remove All button');
     assert.ok(html.includes('Uninstall Extension'), 'Should render individual Uninstall Extension button');
@@ -407,8 +417,9 @@ function testExtensionAuditor() {
     assert.ok(html.includes('Formatters'), 'Should render category chip');
     assert.ok(html.includes('ext-icon-img'), 'Should render extension icon image');
     assert.ok(html.includes('Prettier - Code formatter'), 'Should render extension title');
-    assert.ok(html.includes('✓ Clean'), 'Should render Clean badge');
+    assert.ok(html.includes('badge-clean-outline') || html.includes('✓ Clean'), 'Should render Clean badge');
     assert.ok(html.includes('btn-uninstall-esbenp_prettier_vscode'), 'Should render uninstall button for clean user extension');
+    assert.ok(!html.includes('btn-uninstall-ankushlokhande_guardian_virus_scan'), 'Should NOT render uninstall button for self Guardian extension');
     assert.ok(!html.includes('class="ext-license-chip"'), 'Should NOT render license chip');
     assert.ok(!html.includes('Marketplace'), 'Should NOT render Marketplace link');
     assert.ok(!html.includes('GitHub'), 'Should NOT render GitHub link');
@@ -424,8 +435,8 @@ function testExtensionAuditor() {
     // Verify Tab 1 & Tab 2 Navigation
     assert.ok(html.includes('id="tab-btn-glassworm"'), 'Should render Tab 1 button');
     assert.ok(html.includes('id="tab-btn-extension-audit"'), 'Should render Tab 2 button');
-    assert.ok(html.includes('Repo Audit'), 'Should render Tab 1 title');
-    assert.ok(html.includes('Extension Audit'), 'Should render Tab 2 title');
+    assert.ok(html.includes('Repo Scan'), 'Should render Tab 1 title');
+    assert.ok(html.includes('Extension Scan'), 'Should render Tab 2 title');
     assert.ok(html.includes('Guardian — Glassworm &amp; Malware Scanner'), 'Should render full extension name in header');
     assert.ok(html.includes('id="tab-glassworm"'), 'Should render Tab 1 pane');
     assert.ok(html.includes('id="tab-extension-audit"'), 'Should render Tab 2 pane');

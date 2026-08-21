@@ -409,7 +409,7 @@ function activate(context) {
             }
             else {
                 const emptyResult = {
-                    workspacePath: 'Extension Supply-Chain Audit',
+                    workspacePath: 'Extension Supply-Chain Scan',
                     projectType: 'generic',
                     branches: [],
                     scanDurationMs: 0,
