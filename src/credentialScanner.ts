@@ -37,13 +37,18 @@ export interface CredentialThreat {
   ruleName: string;
   description: string;
   locationType: CredentialLocationType;
+  locationTypes?: CredentialLocationType[];
   file: string;
   line?: number;
   commit?: string;
+  commits?: string[];
   branch?: string;
+  branches?: string[];
+  rawValue?: string;
   redactedValue: string;
   fingerprint: string;
   snippet?: string;
+  rawSnippet?: string;
   remediation: CredentialRemediation;
   isSafe?: boolean;
   safeScope?: 'project' | 'global';
@@ -629,11 +634,13 @@ export function findCredentialsInText(
         const start = Math.max(0, lineIndex - 1);
         const end = Math.min(lines.length - 1, lineIndex + 1);
         const snippetLines: string[] = [];
+        const rawSnippetLines: string[] = [];
         const maskReg = new RegExp(pattern.regex.source, pattern.regex.flags);
         for (let i = start; i <= end; i++) {
           const l = lines[i];
           const maskedLine = l.replace(maskReg, (m) => redactCredential(m));
           snippetLines.push(`${i + 1} | ${maskedLine}`);
+          rawSnippetLines.push(`${i + 1} | ${l}`);
         }
 
         threats.push({
@@ -642,13 +649,16 @@ export function findCredentialsInText(
           ruleName: pattern.name,
           description: pattern.description,
           locationType,
+          locationTypes: [locationType],
           file: filePath,
           line: lineIndex + 1,
           commit: locationType === 'history' ? branchOrCommit : undefined,
           branch: locationType === 'tracked' ? branchOrCommit : undefined,
+          rawValue: secretValue || fullMatch,
           redactedValue: redacted,
           fingerprint: fp,
           snippet: snippetLines.join('\n'),
+          rawSnippet: rawSnippetLines.join('\n'),
           remediation: {
             title: pattern.remediationTitle,
             steps: pattern.remediationSteps,
@@ -804,11 +814,15 @@ export async function scanHistoryCredentials(
               ruleName: pattern.name,
               description: pattern.description,
               locationType: 'history',
+              locationTypes: ['history'],
               file: currentPath,
               commit: currentCommit,
+              commits: [currentCommit],
+              rawValue: secretValue || fullMatch,
               redactedValue: redacted,
               fingerprint: fp,
               snippet: `commit ${currentCommit} | + ${content.replace(maskReg, m => redactCredential(m))}`,
+              rawSnippet: `commit ${currentCommit} | + ${content}`,
               remediation: {
                 title: pattern.remediationTitle,
                 steps: [
@@ -910,10 +924,13 @@ export async function scanRemoteCredentials(
         ruleName: 'Git Remote URL Embedded Credentials',
         description: 'Plaintext credentials or access token stored inside `.git/config` remote URL.',
         locationType: 'git-remote',
+        locationTypes: ['git-remote'],
         file: '.git/config',
+        rawValue: url,
         redactedValue: redacted,
         fingerprint: fp,
         snippet: `remote url = ${redacted}`,
+        rawSnippet: `remote url = ${url}`,
         remediation: {
           title: 'Clean Git Remote URL & Rotate Credentials',
           steps: [
@@ -972,10 +989,12 @@ export async function scanGitHubOrgAlerts(
         ruleName: displayName || `GitHub Secret Alert (${secretType})`,
         description: `Open GitHub Secret Protection Alert #${number} in ${repo} (Validity: ${validity || 'active'}).`,
         locationType: 'github-alert',
+        locationTypes: ['github-alert'],
         file: `${repo}#alert-${number}`,
         redactedValue: '[withheld-by-GitHub]',
         fingerprint: `alert:${number}`,
         snippet: `Repository: ${repo}\nAlert URL: ${url}\nCreated: ${createdAt || 'unknown'}\nValidity: ${validity || 'unknown'}`,
+        rawSnippet: `Repository: ${repo}\nAlert URL: ${url}\nCreated: ${createdAt || 'unknown'}\nValidity: ${validity || 'unknown'}`,
         remediation: {
           title: `Resolve Alert in ${repo}`,
           steps: [
@@ -1107,27 +1126,89 @@ export async function runCredentialScan(
     }
   }
 
-  // Deduplicate findings by (file + line + fingerprint + locationType)
-  const uniqueFindings: CredentialThreat[] = [];
-  const seen = new Set<string>();
+  // Deduplicate and consolidate findings for the same key in the same file across sources
+  const findingsMap = new Map<string, CredentialThreat>();
+
+  const locationRank: Record<CredentialLocationType, number> = {
+    tracked: 10,
+    local: 8,
+    history: 6,
+    'git-remote': 4,
+    'github-alert': 2,
+  };
 
   for (const f of allFindings) {
-    const key = `${f.file}|${f.line || ''}|${f.fingerprint}|${f.locationType}|${f.commit || ''}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueFindings.push(f);
+    const normFile = f.file.replace(/^[./\\]+/, '');
+    const dedupeKey = `${f.id}|${normFile}|${f.fingerprint || f.redactedValue}`;
+
+    const existing = findingsMap.get(dedupeKey);
+    if (!existing) {
+      const initial: CredentialThreat = {
+        ...f,
+        locationTypes: f.locationTypes ? [...f.locationTypes] : [f.locationType],
+        branches: f.branch ? [f.branch] : (f.branches ? [...f.branches] : []),
+        commits: f.commit ? [f.commit] : (f.commits ? [...f.commits] : []),
+      };
+      findingsMap.set(dedupeKey, initial);
+    } else {
+      if (!existing.locationTypes) {
+        existing.locationTypes = [existing.locationType];
+      }
+      const newLocs = f.locationTypes && f.locationTypes.length > 0 ? f.locationTypes : [f.locationType];
+      for (const l of newLocs) {
+        if (!existing.locationTypes.includes(l)) {
+          existing.locationTypes.push(l);
+        }
+      }
+
+      if (f.branch) {
+        if (!existing.branches) existing.branches = [];
+        if (!existing.branches.includes(f.branch)) existing.branches.push(f.branch);
+        if (!existing.branch) existing.branch = f.branch;
+      }
+      if (f.commit) {
+        if (!existing.commits) existing.commits = [];
+        if (!existing.commits.includes(f.commit)) existing.commits.push(f.commit);
+        if (!existing.commit) existing.commit = f.commit;
+      }
+
+      if (!existing.line && f.line) {
+        existing.line = f.line;
+      }
+
+      if (f.snippet && (!existing.snippet || existing.snippet.startsWith('commit '))) {
+        existing.snippet = f.snippet;
+        existing.rawSnippet = f.rawSnippet;
+      }
+
+      const existingRank = locationRank[existing.locationType] || 0;
+      const newRank = locationRank[f.locationType] || 0;
+      if (newRank > existingRank) {
+        existing.locationType = f.locationType;
+      }
     }
   }
+
+  const uniqueFindings = Array.from(findingsMap.values());
 
   const criticalCount = uniqueFindings.filter(f => f.severity === 'critical').length;
   const reviewCount = uniqueFindings.filter(f => f.severity === 'review').length;
   const publicCount = uniqueFindings.filter(f => f.severity === 'public').length;
 
-  const trackedCount = uniqueFindings.filter(f => f.locationType === 'tracked').length;
-  const historyCount = uniqueFindings.filter(f => f.locationType === 'history').length;
-  const localCount = uniqueFindings.filter(f => f.locationType === 'local').length;
-  const remotesCount = uniqueFindings.filter(f => f.locationType === 'git-remote').length;
-  const orgAlertsCount = uniqueFindings.filter(f => f.locationType === 'github-alert').length;
+  let trackedCount = 0;
+  let historyCount = 0;
+  let localCount = 0;
+  let remotesCount = 0;
+  let orgAlertsCount = 0;
+
+  for (const f of uniqueFindings) {
+    const locs = f.locationTypes || [f.locationType];
+    if (locs.includes('tracked')) trackedCount++;
+    if (locs.includes('history')) historyCount++;
+    if (locs.includes('local')) localCount++;
+    if (locs.includes('git-remote')) remotesCount++;
+    if (locs.includes('github-alert')) orgAlertsCount++;
+  }
 
   return {
     totalFindings: uniqueFindings.length,
@@ -1153,8 +1234,9 @@ export async function runCredentialScan(
 export function exportCredentialTsv(report: CredentialScanReport): string {
   const rows = ['location\twhere\tpath\ttype\tredacted\tfingerprint\tdescription'];
   for (const f of report.findings) {
+    const locStr = (f.locationTypes && f.locationTypes.length > 0) ? f.locationTypes.join('+') : f.locationType;
     rows.push(
-      `${f.locationType}\t${f.commit || f.branch || 'disk'}\t${f.file}${f.line ? `:${f.line}` : ''}\t${f.id}\t${f.redactedValue}\t${f.fingerprint}\t${f.description}`
+      `${locStr}\t${f.commit || f.branch || 'disk'}\t${f.file}${f.line ? `:${f.line}` : ''}\t${f.id}\t${f.redactedValue}\t${f.fingerprint}\t${f.description}`
     );
   }
   return rows.join('\n');
@@ -1177,14 +1259,23 @@ export function exportCredentialMarkdown(report: CredentialScanReport): string {
     '',
     '## Findings Summary',
     '',
-    '| Severity | Type | Location | Path | Redacted Value | Fingerprint |',
+    '| Severity | Type | Source / Origin | Path | Redacted Value | Fingerprint |',
     '| --- | --- | --- | --- | --- | --- |',
   ];
 
   for (const f of report.findings) {
     const sevBadge = f.severity === 'critical' ? '🔴 CRITICAL' : f.severity === 'review' ? '🟡 REVIEW' : '⚪ INFO';
+    const locs = f.locationTypes || [f.locationType];
+    const sourceLabel = locs.map(l => {
+      if (l === 'tracked') return 'Remote (Tracked Branch)';
+      if (l === 'history') return `Remote History (${f.commit ? `commit \`${f.commit.slice(0, 8)}\`` : 'commit diff'})`;
+      if (l === 'git-remote') return 'Git Remote URL (.git/config)';
+      if (l === 'github-alert') return 'Remote GitHub Alert';
+      return 'Local File (Disk / .env)';
+    }).join(', ');
+
     lines.push(
-      `| ${sevBadge} | ${f.ruleName} | ${f.locationType} | \`${f.file}${f.line ? `:${f.line}` : ''}\` | \`${f.redactedValue}\` | \`${f.fingerprint}\` |`
+      `| ${sevBadge} | ${f.ruleName} | ${sourceLabel} | \`${f.file}${f.line ? `:${f.line}` : ''}\` | \`${f.redactedValue}\` | \`${f.fingerprint}\` |`
     );
   }
 

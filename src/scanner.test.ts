@@ -596,9 +596,12 @@ async function testCredentialScanner(): Promise<void> {
   assert.ok(matchedRules.includes('here-api-key'), 'Should match here-api-key');
   assert.ok(matchedRules.includes('tomtom-api-key'), 'Should match tomtom-api-key');
 
-  // Verify that findings NEVER contain the raw plaintext secret in redactedValue
+  // Verify that findings NEVER contain the raw plaintext secret in redactedValue, but preserve rawValue for clipboard copy
   for (const f of findings) {
-    assert.ok(!f.redactedValue.includes('ghp_1234567890abcdef1234567890abcdef1234'), 'Plaintext secret must be redacted');
+    assert.ok(!f.redactedValue.includes('ghp_1234567890abcdef1234567890abcdef1234'), 'Plaintext secret must be redacted in display');
+    if (f.id === 'github-pat-classic') {
+      assert.strictEqual(f.rawValue, 'ghp_1234567890abcdef1234567890abcdef1234', 'Plaintext secret must be preserved in rawValue for copying');
+    }
   }
 
   // 4. Test runCredentialScan on a real test git workspace with deep directory nesting
@@ -664,7 +667,27 @@ async function testCredentialScanner(): Promise<void> {
     const hasMapbox = report.findings.some(f => f.id === 'mapbox-public-token' && f.file.includes('map_screen.dart'));
     assert.ok(hasMapbox, 'Should detect Mapbox token in deep Dart file');
 
-    // 5. Test Exporters
+    // 5. Test Multi-Source Deduplication (tracked + local + history for same file)
+    fs.writeFileSync(path.join(root, 'shared_cred.js'), 'const awsKey = "AKIA1234567890FEDCBA";\n');
+    execFileSync('git', ['add', 'shared_cred.js'], { cwd: root });
+    execFileSync('git', ['commit', '--no-gpg-sign', '-m', 'Add shared aws key'], { cwd: root });
+
+    const multiSourceReport = await runCredentialScan(root, {
+      scanTracked: true,
+      scanHistory: true,
+      scanLocal: true,
+      scanRemotes: false,
+    });
+
+    const sharedFindings = multiSourceReport.findings.filter(f => f.file === 'shared_cred.js' && f.id === 'aws-access-key');
+    assert.strictEqual(sharedFindings.length, 1, 'Should consolidate same key in same file into exactly 1 finding item');
+    const shared = sharedFindings[0];
+    assert.ok(shared.locationTypes?.includes('tracked'), 'Should record tracked in locationTypes');
+    assert.ok(shared.locationTypes?.includes('local'), 'Should record local in locationTypes');
+    assert.ok(shared.locationTypes?.includes('history'), 'Should record history in locationTypes');
+    assert.ok(shared.rawSnippet?.includes('AKIA1234567890FEDCBA'), 'Should preserve unmasked rawSnippet');
+
+    // 6. Test Exporters
     const tsv = exportCredentialTsv(report);
     assert.ok(tsv.includes('location\twhere\tpath\ttype\tredacted\tfingerprint\tdescription'), 'TSV should have header');
     assert.ok(tsv.includes('ghp_12…1234') || tsv.includes('[REDACTED]'), 'TSV must contain masked values only');
@@ -677,7 +700,7 @@ async function testCredentialScanner(): Promise<void> {
     assert.ok(md.includes('# Guardian — Credential & Secret Scan Report'));
     assert.ok(md.includes('## Findings Summary'));
 
-    // 6. Test Webview HTML Report with Tab 3 (Both un-scanned initial state and scanned state)
+    // 7. Test Webview HTML Report with Tab 3 (Both un-scanned initial state and scanned state)
     const scanResultWithoutCreds: WorkspaceScanResult = {
       workspacePath: root,
       projectType: 'flutter',
@@ -685,10 +708,21 @@ async function testCredentialScanner(): Promise<void> {
       safeRules: [],
       branches: [],
     };
+    const getCredBanner = (h: string) => {
+      const m = h.match(/<div class="summary-hero [^"]*" id="cred-summary-banner">([\s\S]*?)<\/div>/);
+      return m ? m[1] : '';
+    };
+
     const initialHtml = buildReportHtml(scanResultWithoutCreds, 'credential-scan');
-    assert.ok(initialHtml.includes('id="credential-audit-container"'), 'Initial HTML must include container');
-    assert.ok(initialHtml.includes('id="tab-credential-scan" class="tab-pane active"'), 'Tab 3 pane must be active');
-    assert.ok(initialHtml.includes('btn-cred-start'), 'Initial HTML must include start button');
+    const initialBody = initialHtml.slice(0, initialHtml.indexOf('<script>'));
+    assert.ok(initialBody.includes('id="credential-audit-container"'), 'Initial HTML must include container');
+    assert.ok(initialBody.includes('id="tab-credential-scan" class="tab-pane active"'), 'Tab 3 pane must be active');
+    assert.ok(!initialBody.includes('id="cred-summary-banner"'), 'Initial view must NOT contain the intro green banner');
+    assert.ok(initialBody.includes('cred-options-card'), 'Initial view must directly show options toolbar');
+    assert.ok(initialBody.includes('id="cred-opt-tracked" checked'), 'Tracked branch tips must be enabled by default');
+    assert.ok(initialBody.includes('id="cred-opt-remotes" checked'), 'Git remote URLs must be enabled by default');
+    assert.ok(initialBody.includes('id="cred-opt-local" />'), 'Local untracked files must be unchecked by default');
+    assert.ok(initialBody.includes('id="cred-opt-history" />'), 'Deep Git history must be unchecked by default');
 
     const scanResultWithCreds: WorkspaceScanResult = {
       workspacePath: root,
@@ -702,6 +736,25 @@ async function testCredentialScanner(): Promise<void> {
     const credHtml = buildReportHtml(scanResultWithCreds, 'credential-scan');
     assert.ok(credHtml.includes('id="tab-btn-credential-scan"'), 'Should render Tab 3 button');
     assert.ok(credHtml.includes('id="tab-credential-scan" class="tab-pane active"'), 'Tab 3 pane should be active');
+    assert.ok(!getCredBanner(credHtml).includes('<button'), 'Results cred banner must NOT contain any button');
+    assert.ok(credHtml.includes('cred-token-chip'), 'Should render sleek token chip');
+    assert.ok(credHtml.includes('copySecretChip(this)'), 'Chip should trigger copySecretChip on click');
+    assert.ok(!credHtml.includes('cred-quick-copy-btn'), 'Separate quick copy button should be removed');
+    assert.ok(credHtml.includes('cred-snippet-eye-btn'), 'Should render code preview eye button');
+    assert.ok(credHtml.includes('toggleSnippetSecret('), 'Should define eye toggle function');
+    assert.ok(!credHtml.includes('cred-desc-row'), 'Verbose description row must be removed');
+    assert.ok(credHtml.includes('data-masked-snippet='), 'Snippet should contain masked snippet data attribute');
+    assert.ok(credHtml.includes('data-raw-snippet='), 'Snippet should contain raw snippet data attribute');
+    assert.ok(credHtml.includes('eye-open-svg'), 'Snippet eye button should have eye open SVG');
+    assert.ok(credHtml.includes('eye-closed-svg'), 'Snippet eye button should have eye closed SVG');
+    assert.ok(credHtml.includes('sev-dot'), 'Should render status circle dot');
+    assert.ok(credHtml.includes('cred-title'), 'Should render normal title typography');
+    assert.ok(credHtml.includes('cred-source-row'), 'Should render dedicated source row');
+    assert.ok(credHtml.includes('cred-source-label'), 'Should render Source: label');
+    assert.ok(credHtml.includes('cred-source-badge'), 'Should render source badges');
+    assert.ok(credHtml.includes('openCredentialLocationBtn('), 'Should define interactive location navigation handler');
+    assert.ok(credHtml.includes('activeHoveredCredCard'), 'Should install hover and keyboard shortcut listeners');
+
     // Validate that client-side <script> in all HTML variants has 100% valid JS syntax without escaping errors
     const vm = require('vm');
     const validateScript = (html: string, label: string) => {

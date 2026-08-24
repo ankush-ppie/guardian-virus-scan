@@ -2,6 +2,22 @@
 
 All notable changes to the **Guardian Virus Scan** extension will be documented in this file.
 
+## [1.5.0] - 2026-08-21
+
+### Added
+- **Credential & Secret Scanner (Tab 3)**:
+  - **Multi-Source Coverage**: Deep scanning across tracked branch tips, deep Git commit history (`--history`), untracked local disk files (`--local`, e.g. `.env`, `.npmrc`, keys), and `.git/config` remote URLs.
+  - **Multi-Source Single-Item Consolidation ("Where We Watch")**: Secrets detected across multiple locations in the same file are consolidated into 1 finding item with all watched locations displayed side-by-side (`🌐 Remote (Tracked Branch) + 📄 Local + 📜 Remote History`).
+  - **Streamlined 2-Line Header Layout**:
+    - **Line 1**: Glowing status circle dot (`🔴`, `🟡`, `🟢`), clean title typography, interactive token chip (`[ 🔑 AIzaSy...UDsY ]`), dedicated jump-to-file link (`[ 📄 android/...:69  commit: b2e90589  main ↗ ]`), and remediation steps drawer toggle.
+    - **Line 2**: Dedicated `Source:` row clearly showing where the key was tracked.
+  - **Plaintext Clipboard Copying**: Clicking the token chip copies the actual unmasked token to clipboard with instant `"✓ Copied!"` visual feedback while keeping on-screen text safely masked against shoulder surfing.
+  - **Interactive Code Preview Eye Toggle**: Added an Eye toggle button (`👁️ Show Key` / `👁️‍🗨️ Hide Key`) with open/closed eye SVG icons in the code snippet header to toggle between masked and unmasked snippet previews.
+  - **Enhanced Toolbar Source Filters**: Added source filter tags with live count badges (`All`, `✨ Multi-Source`, `🌐 Remote: Tracked`, `📜 Remote History`, `📄 Local`, `🔗 Git Remotes`, and `☁️ Org Alert`).
+  - **Offline Privacy & Security**: Scans execute locally without transmitting secrets over the network.
+  - **Secure Exporters**: Export audit findings to TSV (created with secure 0600 file permissions), JSON, or Markdown formats.
+  - **Incident Response Guide**: Built-in vendor-specific remediation steps and Git history purging commands (`git filter-repo`).
+
 ## [1.4.0] - 2026-08-21
 
 ### Added

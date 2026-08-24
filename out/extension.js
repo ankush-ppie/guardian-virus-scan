@@ -163,18 +163,39 @@ async function openCredentialFile(context, workspaceRoot, file, line = 1, locati
             vscode.env.openExternal(vscode.Uri.parse(file));
             return;
         }
+        const root = path.resolve(workspaceRoot);
+        const normalizedFile = file.replace(/^[/\\]+/, '');
+        const localTarget = path.resolve(root, normalizedFile);
+        // If it's a historical commit diff, open the read-only commit snapshot
         if (locationType === 'history' && branchOrCommit) {
-            const gitPath = file.replace(/\\/g, '/');
-            const raw = (0, child_process_1.execFileSync)('git', ['show', `${branchOrCommit}:${gitPath}`], {
-                cwd: workspaceRoot,
-                stdio: ['ignore', 'pipe', 'pipe'],
-                maxBuffer: 8 * 1024 * 1024,
-                windowsHide: true,
-            }).toString('utf8');
-            const scheme = 'guardian-branch';
-            const uri = vscode.Uri.parse(`${scheme}:/${encodeURIComponent(`commit-${branchOrCommit}`)}/${file.replace(/\\/g, '/')}`);
-            virtualDocuments.set(uri.toString(), raw);
-            const doc = await vscode.workspace.openTextDocument(uri);
+            const gitPath = normalizedFile.replace(/\\/g, '/');
+            try {
+                const raw = (0, child_process_1.execFileSync)('git', ['show', `${branchOrCommit}:${gitPath}`], {
+                    cwd: workspaceRoot,
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                    maxBuffer: 8 * 1024 * 1024,
+                    windowsHide: true,
+                }).toString('utf8');
+                const scheme = 'guardian-branch';
+                const uri = vscode.Uri.parse(`${scheme}:/${encodeURIComponent(`commit-${branchOrCommit}`)}/${gitPath}`);
+                virtualDocuments.set(uri.toString(), raw);
+                const doc = await vscode.workspace.openTextDocument(uri);
+                const editor = await vscode.window.showTextDocument(doc, {
+                    preview: false,
+                    viewColumn: vscode.ViewColumn.Beside,
+                });
+                const range = new vscode.Range(targetLine, 0, targetLine, 999);
+                editor.selection = new vscode.Selection(range.start, range.end);
+                editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+                return;
+            }
+            catch {
+                // Fallback to disk if git show fails
+            }
+        }
+        // Check if the file is present on the local filesystem (editable local document)
+        if (fs.existsSync(localTarget)) {
+            const doc = await vscode.workspace.openTextDocument(localTarget);
             const editor = await vscode.window.showTextDocument(doc, {
                 preview: false,
                 viewColumn: vscode.ViewColumn.Beside,
@@ -184,25 +205,12 @@ async function openCredentialFile(context, workspaceRoot, file, line = 1, locati
             editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
             return;
         }
-        if (locationType === 'tracked' && branchOrCommit) {
-            await openThreatFile(context, workspaceRoot, file, line, branchOrCommit);
+        // If file is not present locally on disk (e.g. remote branch ref), show read-only virtual document
+        if (branchOrCommit) {
+            await openThreatFile(context, workspaceRoot, normalizedFile, line, branchOrCommit);
             return;
         }
-        // Local file or .git/config
-        const root = path.resolve(workspaceRoot);
-        const target = path.resolve(root, file);
-        if (!fs.existsSync(target)) {
-            vscode.window.showWarningMessage(`Guardian: File "${file}" was not found on disk.`);
-            return;
-        }
-        const doc = await vscode.workspace.openTextDocument(target);
-        const editor = await vscode.window.showTextDocument(doc, {
-            preview: false,
-            viewColumn: vscode.ViewColumn.Beside,
-        });
-        const range = new vscode.Range(targetLine, 0, targetLine, 999);
-        editor.selection = new vscode.Selection(range.start, range.end);
-        editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+        vscode.window.showWarningMessage(`Guardian: File "${file}" was not found on disk or in git tree.`);
     }
     catch (e) {
         vscode.window.showErrorMessage(`Guardian: Could not open "${file}" — ${e.message}`);
@@ -365,7 +373,7 @@ function showReport(result, context, initialTab = 'glassworm') {
             const options = msg.options || {
                 scanTracked: true,
                 scanHistory: false,
-                scanLocal: true,
+                scanLocal: false,
                 scanRemotes: true,
             };
             const workspacePath = latestResult?.workspacePath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -632,7 +640,7 @@ function activate(context) {
         const defaultOptions = {
             scanTracked: true,
             scanHistory: false,
-            scanLocal: true,
+            scanLocal: false,
             scanRemotes: true,
         };
         const report = await (0, credentialScanner_1.runCredentialScan)(workspacePath, defaultOptions, (progress) => {

@@ -527,12 +527,23 @@ function buildExtensionCard(ext: AuditedExtension, activeFilter: string = 'user'
 
 function credentialLocationLabel(locationType: string): string {
   switch (locationType) {
-    case 'tracked': return '💻 Tracked in Git';
-    case 'history': return '📜 Git Commit History';
-    case 'local': return '📄 Local File (.env/disk)';
-    case 'git-remote': return '🌐 Git Remote (.git/config)';
-    case 'github-alert': return '☁️ GitHub Alert';
+    case 'tracked': return '🌐 Remote (Tracked Branch)';
+    case 'history': return '📜 Remote History (Git Commit)';
+    case 'local': return '📄 Local (Disk / .env)';
+    case 'git-remote': return '🔗 Git Remote (.git/config)';
+    case 'github-alert': return '☁️ Remote (GitHub Org Alert)';
     default: return locationType;
+  }
+}
+
+function credentialLocationSourceBadge(loc: string, branch?: string): string {
+  switch (loc) {
+    case 'tracked': return `<span class="cred-source-badge loc-tracked" title="Committed in branch${branch ? ': ' + escHtml(branch) : ''}">🌐 Remote (Tracked Branch${branch ? ': ' + escHtml(branch) : ''})</span>`;
+    case 'history': return '<span class="cred-source-badge loc-history" title="Found in Git commit history">📜 Remote History</span>';
+    case 'local': return '<span class="cred-source-badge loc-local" title="Found in local workspace file">📄 Local</span>';
+    case 'git-remote': return '<span class="cred-source-badge loc-git-remote" title="Found in .git/config remote URL">🔗 Git Remote</span>';
+    case 'github-alert': return '<span class="cred-source-badge loc-github-alert" title="Found in GitHub Secret Scanning alert">☁️ GitHub Alert</span>';
+    default: return `<span class="cred-source-badge loc-${escHtml(loc)}">${escHtml(loc)}</span>`;
   }
 }
 
@@ -542,27 +553,40 @@ function buildCredentialCard(threat: CredentialThreat, uid: string): string {
   const isSafe = !!threat.isSafe;
 
   const sevColor = isSafe ? 'var(--green)' : isCritical ? 'var(--red)' : isReview ? 'var(--yellow)' : 'var(--blue)';
-  const sevBg = isSafe ? 'var(--bg-green-soft)' : isCritical ? 'var(--bg-red-soft)' : isReview ? 'var(--bg-yellow-soft)' : 'var(--bg3)';
-  const sevBorder = isSafe ? 'rgba(74, 222, 128, 0.3)' : isCritical ? 'var(--border-red)' : isReview ? 'var(--border-yellow)' : 'var(--border)';
-  const sevText = isSafe ? 'SAFE' : isCritical ? 'CRITICAL SECRET' : isReview ? 'REVIEW REQUIRED' : 'INFO';
+  const sevText = isSafe ? 'SAFE' : isCritical ? 'CRITICAL' : isReview ? 'REVIEW REQUIRED' : 'INFO';
 
   const drawerId = `cred-drawer-${uid}`;
   const drawerBtnId = `cred-btn-drawer-${uid}`;
+  const fileIcon = threat.locationType === 'history' ? '📜' : threat.locationType === 'tracked' ? '🌐' : threat.locationType === 'git-remote' ? '🔗' : threat.locationType === 'github-alert' ? '☁️' : '📄';
+
+  const locTypes = threat.locationTypes && threat.locationTypes.length > 0 ? threat.locationTypes : [threat.locationType];
+  const sourceBadgesHtml = locTypes.map(l => credentialLocationSourceBadge(l, threat.branch)).join(' <span class="source-plus">+</span> ');
+
+  const snippetTag = locTypes.length > 1
+    ? locTypes.map(l => l === 'tracked' ? '🌐 REMOTE (TRACKED BRANCH)' : l === 'history' ? '📜 REMOTE HISTORY' : l === 'local' ? '📄 LOCAL FILE' : l === 'git-remote' ? '🔗 GIT REMOTE' : '☁️ GITHUB ALERT').join(' • ')
+    : (threat.locationType === 'history' ? '📜 REMOTE HISTORY CONTEXT' : threat.locationType === 'tracked' ? '🌐 REMOTE (TRACKED BRANCH)' : threat.locationType === 'git-remote' ? '🔗 GIT REMOTE URL (.GIT/CONFIG)' : threat.locationType === 'github-alert' ? '☁️ REMOTE GITHUB ALERT' : '📄 LOCAL FILE CONTEXT');
 
   return `
     <div class="cred-card ${isSafe ? 'is-safe' : isCritical ? 'is-critical' : 'is-review'}"
          id="cred-card-${uid}"
+         tabindex="0"
          data-sev="${threat.severity}"
          data-safe="${isSafe ? 'true' : 'false'}"
-         data-location="${threat.locationType}"
-         data-search="${escHtml((threat.ruleName + ' ' + threat.file + ' ' + (threat.commit || '') + ' ' + (threat.branch || '') + ' ' + threat.redactedValue + ' ' + threat.fingerprint).toLowerCase())}">
+         data-location="${locTypes.join(' ')}"
+         data-search="${escHtml((threat.ruleName + ' ' + threat.file + ' ' + (threat.commit || '') + ' ' + (threat.branch || '') + ' ' + threat.redactedValue + ' ' + threat.fingerprint + ' ' + locTypes.join(' ') + ' ' + locTypes.map(l => credentialLocationLabel(l)).join(' ')).toLowerCase())}">
       <div class="cred-card-left-bar" style="background:${sevColor}"></div>
       <div class="cred-card-body">
         <div class="cred-card-header">
           <div class="cred-header-left">
-            <span class="sev-pill" style="background:${sevBg};color:${sevColor};border:1px solid ${sevBorder}">${sevText}</span>
-            <span class="cred-type-badge">${escHtml(threat.ruleName)}</span>
-            <span class="cred-location-badge loc-${threat.locationType}">${credentialLocationLabel(threat.locationType)}</span>
+            <span class="sev-dot sev-${threat.severity}" title="${sevText}"></span>
+            <span class="cred-title">${escHtml(threat.ruleName)}</span>
+            <button class="cred-token-chip" 
+                    data-value="${escHtml(threat.rawValue || threat.redactedValue)}" 
+                    onclick="copySecretChip(this)" 
+                    title="Click to copy secret key (or press 'C')">
+              <span class="token-icon">🔑</span>
+              <span class="token-val">${escHtml(threat.redactedValue)}</span>
+            </button>
           </div>
           <div class="cred-header-right">
             <button class="cred-file-link-btn" 
@@ -571,29 +595,12 @@ function buildCredentialCard(threat: CredentialThreat, uid: string): string {
                     data-location-type="${escHtml(threat.locationType)}"
                     data-branch-commit="${escHtml(threat.commit || threat.branch || '')}"
                     onclick="openCredentialLocationBtn(this)" 
-                    title="Open file in editor">
-              <span class="file-icon">📄</span>
+                    title="Jump to line ${threat.line || 1} in editor">
+              <span class="file-icon">${fileIcon}</span>
               <span class="file-name">${escHtml(threat.file)}${threat.line ? `:${threat.line}` : ''}</span>
-              ${threat.commit ? `<span class="commit-pill">commit: ${escHtml(threat.commit)}</span>` : ''}
+              ${threat.commit ? `<span class="commit-pill">commit: ${escHtml(threat.commit.slice(0, 8))}</span>` : ''}
               ${threat.branch ? `<span class="branch-pill">${escHtml(threat.branch)}</span>` : ''}
-            </button>
-          </div>
-        </div>
-
-        <div class="cred-desc">${escHtml(threat.description)}</div>
-
-        <div class="cred-value-box">
-          <div class="cred-value-left">
-            <span class="cred-value-label">MATCHED VALUE:</span>
-            <code class="cred-value-code">${escHtml(threat.redactedValue)}</code>
-            <span class="cred-fp-badge" title="SHA-256 Fingerprint">${escHtml(threat.fingerprint)}</span>
-          </div>
-          <div class="cred-value-actions">
-            <button class="cred-copy-btn" data-value="${escHtml(threat.redactedValue)}" onclick="copyRedactedBtn(this)" title="Copy Redacted Value">
-              <span class="btn-icon">📋</span> Copy Masked
-            </button>
-            <button class="cred-copy-btn" data-value="${escHtml(threat.fingerprint)}" onclick="copyFingerprintBtn(this)" title="Copy SHA-256 Fingerprint">
-              <span class="btn-icon">🔑</span> Copy SHA-256
+              <span class="nav-arrow">↗</span>
             </button>
             <button class="cred-remediation-btn" id="${drawerBtnId}" data-drawer="${drawerId}" onclick="toggleRemediationDrawerBtn(this)">
               <span class="btn-icon">🛠️</span> Remediation Steps ▾
@@ -601,12 +608,34 @@ function buildCredentialCard(threat: CredentialThreat, uid: string): string {
           </div>
         </div>
 
+        <div class="cred-source-row">
+          <span class="cred-source-label">Source:</span>
+          <div class="cred-source-badges">
+            ${sourceBadgesHtml}
+          </div>
+        </div>
+
         ${threat.snippet ? `
           <div class="cred-snippet-wrap">
             <div class="cred-snippet-header">
-              <span class="snippet-tag">Context Snippet</span>
+              <div class="snippet-header-left">
+                <span class="snippet-tag">${snippetTag}</span>
+                <span class="snippet-loc">${escHtml(threat.file)}${threat.line ? `:${threat.line}` : ''}</span>
+              </div>
+              <div class="snippet-header-right">
+                <button class="cred-snippet-eye-btn" 
+                        onclick="toggleSnippetSecret(this)" 
+                        data-revealed="false" 
+                        title="Show full key in code preview">
+                  <span class="eye-icon">
+                    <svg class="eye-open-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg class="eye-closed-svg" style="display:none;" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  </span>
+                  <span class="eye-text">Show Key</span>
+                </button>
+              </div>
             </div>
-            <pre class="cred-snippet-pre">${escHtml(threat.snippet)}</pre>
+            <pre class="cred-snippet-pre" data-masked-snippet="${escHtml(threat.snippet)}" data-raw-snippet="${escHtml(threat.rawSnippet || threat.snippet)}">${escHtml(threat.snippet)}</pre>
           </div>
         ` : ''}
 
@@ -689,7 +718,7 @@ function buildCredentialSection(audit?: CredentialScanReport): string {
           </span>
         </label>
         <label class="cred-option-checkbox">
-          <input type="checkbox" id="cred-opt-local" checked />
+          <input type="checkbox" id="cred-opt-local" />
           <span class="opt-label-text">
             <strong>Local &amp; Untracked Files (<code>--local</code>)</strong>
             <span class="opt-sub">Check disk files (.env, .npmrc, untracked scripts)</span>
@@ -713,22 +742,6 @@ function buildCredentialSection(audit?: CredentialScanReport): string {
   if (!hasAudit) {
     return `
       <div id="credential-audit-container">
-        <div class="summary-hero ok" id="cred-summary-banner">
-          <div class="hero-left">
-            <div class="hero-check-circle">🛡️</div>
-            <div class="hero-text">
-              <div class="hero-title">Credential &amp; Secret Protection Scanner</div>
-              <div class="hero-sub">Audit your codebase, .env files, Map API keys, Git remote URLs, and commit diffs for exposed secrets.</div>
-            </div>
-          </div>
-          <div class="hero-actions">
-            <button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Run credential scan">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              Run Credential Scan
-            </button>
-          </div>
-        </div>
-
         <div class="branches-section" id="cred-results-wrapper">
           ${optionsToolbar}
 
@@ -757,12 +770,6 @@ function buildCredentialSection(audit?: CredentialScanReport): string {
           <div class="hero-sub">Exposed active credentials grant unauthorized access. Revoke at the service provider immediately. Deleting files or commits does not revoke live keys.</div>
         </div>
       </div>
-      <div class="hero-actions">
-        <button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-          Re-Scan
-        </button>
-      </div>
     </div>`
     : reviewCount > 0
       ? `
@@ -774,12 +781,6 @@ function buildCredentialSection(audit?: CredentialScanReport): string {
           <div class="hero-sub">Found keys (e.g. Google / Map API Keys) that may be public or unrestricted. Verify key restrictions in the respective provider console.</div>
         </div>
       </div>
-      <div class="hero-actions">
-        <button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-          Re-Scan
-        </button>
-      </div>
     </div>`
       : `
     <div class="summary-hero ok" id="cred-summary-banner">
@@ -790,21 +791,16 @@ function buildCredentialSection(audit?: CredentialScanReport): string {
           <div class="hero-sub">Scanned workspace coverage — no token-shaped keys, private keys, or exposed credentials found.</div>
         </div>
       </div>
-      <div class="hero-actions">
-        <button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-          Re-Scan
-        </button>
-      </div>
     </div>`;
 
-  const cardsHtml = audit.findings.map((t, idx) => buildCredentialCard(t, `cred-${idx}`)).join('');
+  const multiSourceCount = (audit?.findings || []).filter(f => (f.locationTypes?.length || 0) > 1).length;
+  const cardsHtml = audit?.findings ? audit.findings.map((t, idx) => buildCredentialCard(t, `cred-${idx}`)).join('') : '';
 
   return `
     <div id="credential-audit-container">
-      ${summaryBanner}
       <div class="branches-section" id="cred-results-wrapper">
         ${optionsToolbar}
+        ${summaryBanner}
 
         <div class="branches-toolbar" style="margin-top: 16px;">
           <div class="branches-toolbar-left">
@@ -823,11 +819,12 @@ function buildCredentialSection(audit?: CredentialScanReport): string {
             <div class="filter-group">
               <span class="filter-group-label">Source:</span>
               <div class="filter-group-buttons">
-                <button class="filter-tag active" data-cred-location="all" onclick="handleCredLocationFilterClick(this)">All</button>
-                ${trackedCount > 0 ? `<button class="filter-tag" data-cred-location="tracked" onclick="handleCredLocationFilterClick(this)">💻 Tracked (${trackedCount})</button>` : ''}
-                ${historyCount > 0 ? `<button class="filter-tag" data-cred-location="history" onclick="handleCredLocationFilterClick(this)">📜 History (${historyCount})</button>` : ''}
-                ${localCount > 0 ? `<button class="filter-tag" data-cred-location="local" onclick="handleCredLocationFilterClick(this)">📄 Local .env (${localCount})</button>` : ''}
-                ${remotesCount > 0 ? `<button class="filter-tag" data-cred-location="git-remote" onclick="handleCredLocationFilterClick(this)">🌐 Remote (${remotesCount})</button>` : ''}
+                <button class="filter-tag active" data-cred-location="all" onclick="handleCredLocationFilterClick(this)">All (${totalFindings})</button>
+                ${multiSourceCount > 0 ? `<button class="filter-tag" data-cred-location="multi" onclick="handleCredLocationFilterClick(this)">✨ Multi-Source (${multiSourceCount})</button>` : ''}
+                <button class="filter-tag" data-cred-location="tracked" onclick="handleCredLocationFilterClick(this)">🌐 Remote: Tracked (${trackedCount})</button>
+                <button class="filter-tag" data-cred-location="history" onclick="handleCredLocationFilterClick(this)">📜 Remote History (${historyCount})</button>
+                <button class="filter-tag" data-cred-location="local" onclick="handleCredLocationFilterClick(this)">📄 Local (${localCount})</button>
+                ${remotesCount > 0 ? `<button class="filter-tag" data-cred-location="git-remote" onclick="handleCredLocationFilterClick(this)">🔗 Git Remotes (${remotesCount})</button>` : ''}
                 ${orgAlertsCount > 0 ? `<button class="filter-tag" data-cred-location="github-alert" onclick="handleCredLocationFilterClick(this)">☁️ Org Alert (${orgAlertsCount})</button>` : ''}
               </div>
             </div>
@@ -2374,12 +2371,17 @@ export function buildReportHtml(
     .cred-card:hover {
       border-color: #27344a;
     }
+    .cred-card:focus {
+      outline: none;
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+    }
     .cred-card-left-bar {
       width: 4px;
       flex-shrink: 0;
     }
     .cred-card-body {
-      padding: 16px 18px;
+      padding: 14px 18px;
       flex: 1;
       display: flex;
       flex-direction: column;
@@ -2399,51 +2401,169 @@ export function buildReportHtml(
       gap: 8px;
       flex-wrap: wrap;
     }
-    .cred-type-badge {
-      font-family: monospace;
-      font-size: 11.5px;
-      font-weight: 700;
-      color: #f8fafc;
-      background: #1b2332;
-      border: 1px solid #2a374d;
-      padding: 2px 8px;
-      border-radius: 5px;
+    .sev-dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
     }
-    .cred-location-badge {
-      font-size: 10.5px;
+    .sev-dot.sev-critical {
+      background: #f87171;
+      box-shadow: 0 0 8px rgba(248, 113, 113, 0.7);
+    }
+    .sev-dot.sev-review {
+      background: #facc15;
+      box-shadow: 0 0 8px rgba(250, 204, 21, 0.6);
+    }
+    .sev-dot.sev-safe {
+      background: #4ade80;
+      box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+    }
+    .sev-dot.sev-public {
+      background: #38bdf8;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+    }
+
+    .cred-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f1f5f9;
+      letter-spacing: -0.01em;
+    }
+
+    .cred-source-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+      margin-top: 1px;
+      margin-bottom: 2px;
+      font-size: 11.5px;
+    }
+    .cred-source-label {
+      font-weight: 600;
+      color: #64748b;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .cred-source-badges {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .cred-source-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
       font-weight: 600;
       padding: 2px 7px;
       border-radius: 5px;
-      background: #161e2a;
-      border: 1px solid #222d3d;
-      color: #94a3b8;
+      background: #141b26;
+      border: 1px solid #202b3c;
     }
-    .cred-location-badge.loc-tracked { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); }
-    .cred-location-badge.loc-history { color: #a78bfa; border-color: rgba(167, 139, 250, 0.3); }
-    .cred-location-badge.loc-local { color: #fb923c; border-color: rgba(251, 146, 60, 0.3); }
-    .cred-location-badge.loc-git-remote { color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
+    .cred-source-badge.loc-tracked { color: #38bdf8; background: rgba(56, 189, 248, 0.08); border-color: rgba(56, 189, 248, 0.25); }
+    .cred-source-badge.loc-history { color: #c084fc; background: rgba(192, 132, 252, 0.08); border-color: rgba(192, 132, 252, 0.25); }
+    .cred-source-badge.loc-local { color: #fb923c; background: rgba(251, 146, 60, 0.08); border-color: rgba(251, 146, 60, 0.25); }
+    .cred-source-badge.loc-git-remote { color: #f87171; background: rgba(248, 113, 113, 0.08); border-color: rgba(248, 113, 113, 0.25); }
+    .cred-source-badge.loc-github-alert { color: #60a5fa; background: rgba(96, 165, 250, 0.08); border-color: rgba(96, 165, 250, 0.25); }
+    .source-plus {
+      font-size: 10px;
+      color: #64748b;
+      font-weight: 700;
+    }
 
-    .cred-file-link-btn {
+    #cred-summary-banner {
+      margin: 16px 0 0 0;
+    }
+
+    .cred-token-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(248, 113, 113, 0.09);
+      border: 1px solid rgba(248, 113, 113, 0.28);
+      padding: 2px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .cred-token-chip:hover {
+      background: rgba(248, 113, 113, 0.2);
+      border-color: rgba(248, 113, 113, 0.55);
+      box-shadow: 0 0 8px rgba(248, 113, 113, 0.2);
+      transform: translateY(-1px);
+    }
+    .cred-token-chip:active {
+      transform: translateY(0);
+    }
+    .cred-token-chip .token-icon {
+      font-size: 11px;
+      line-height: 1;
+    }
+    .cred-token-chip .token-val {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fca5a5;
+      background: transparent !important;
+      padding: 0 !important;
+      border: none !important;
+      line-height: 1;
+    }
+    .cred-token-chip.copied {
+      background: rgba(74, 222, 128, 0.15) !important;
+      border-color: rgba(74, 222, 128, 0.45) !important;
+    }
+    .cred-token-chip.copied .token-val {
+      color: #86efac !important;
+    }
+
+    .cred-header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .cred-file-link-btn, .cred-remediation-btn {
       display: inline-flex;
       align-items: center;
       gap: 6px;
       background: #141b26;
       border: 1px solid #202b3c;
       color: #94a3b8;
-      padding: 3px 8px;
+      padding: 3px 9px;
       border-radius: 6px;
       font-size: 11px;
       cursor: pointer;
       transition: all 0.12s ease;
       max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .cred-file-link-btn:hover {
+    .cred-file-link-btn:hover, .cred-remediation-btn:hover {
       background: #182232;
       border-color: #38bdf8;
       color: #f1f5f9;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+    }
+    .cred-file-link-btn {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cred-remediation-btn {
+      font-weight: 600;
+    }
+
+    .nav-arrow {
+      font-size: 11px;
+      color: #38bdf8;
+      margin-left: 2px;
     }
     .commit-pill, .branch-pill {
       font-size: 9.5px;
@@ -2453,78 +2573,7 @@ export function buildReportHtml(
       padding: 1px 5px;
       border-radius: 4px;
     }
-    .cred-desc {
-      font-size: 12px;
-      color: var(--text2);
-      line-height: 1.45;
-    }
-    .cred-value-box {
-      background: #0a0d13;
-      border: 1px solid #1a2230;
-      border-radius: 7px;
-      padding: 10px 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .cred-value-left {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-      min-width: 0;
-    }
-    .cred-value-label {
-      font-size: 10px;
-      font-weight: 700;
-      color: #64748b;
-      letter-spacing: 0.05em;
-    }
-    .cred-value-code {
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 12.5px;
-      font-weight: 700;
-      color: #f87171;
-      background: rgba(248, 113, 113, 0.08);
-      border: 1px solid rgba(248, 113, 113, 0.2);
-      padding: 2px 8px;
-      border-radius: 4px;
-    }
-    .cred-fp-badge {
-      font-family: monospace;
-      font-size: 10.5px;
-      color: #64748b;
-      background: #141b25;
-      padding: 2px 6px;
-      border-radius: 4px;
-      border: 1px solid #1f2a3a;
-    }
-    .cred-value-actions {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .cred-copy-btn, .cred-remediation-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      background: #151b26;
-      color: #94a3b8;
-      border: 1px solid #202c3e;
-      padding: 4px 9px;
-      border-radius: 5px;
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.12s ease;
-    }
-    .cred-copy-btn:hover, .cred-remediation-btn:hover {
-      background: #1a2332;
-      color: #f1f5f9;
-      border-color: #38bdf8;
-    }
+
     .cred-snippet-wrap {
       background: #0d1117;
       border: 1px solid #1d2534;
@@ -2533,8 +2582,46 @@ export function buildReportHtml(
     }
     .cred-snippet-header {
       background: #131924;
-      padding: 4px 10px;
+      padding: 5px 12px;
       border-bottom: 1px solid #1d2534;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .snippet-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .snippet-header-right {
+      display: flex;
+      align-items: center;
+    }
+    .cred-snippet-eye-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #182232;
+      border: 1px solid #28374d;
+      color: #94a3b8;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    .cred-snippet-eye-btn:hover {
+      background: #202d42;
+      border-color: #38bdf8;
+      color: #f1f5f9;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.15);
+    }
+    .cred-snippet-eye-btn .eye-icon {
+      display: inline-flex;
+      align-items: center;
     }
     .snippet-tag {
       font-size: 9.5px;
@@ -2542,9 +2629,14 @@ export function buildReportHtml(
       color: #64748b;
       text-transform: uppercase;
     }
+    .snippet-loc {
+      font-family: monospace;
+      font-size: 11px;
+      color: #94a3b8;
+    }
     .cred-snippet-pre {
       padding: 8px 12px;
-      font-family: monospace;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
       font-size: 11.5px;
       line-height: 1.5;
       color: #cbd5e1;
@@ -3903,7 +3995,7 @@ export function buildReportHtml(
   function triggerCredentialScan() {
     const tracked = document.getElementById('cred-opt-tracked')?.checked ?? true;
     const history = document.getElementById('cred-opt-history')?.checked ?? false;
-    const local = document.getElementById('cred-opt-local')?.checked ?? true;
+    const local = document.getElementById('cred-opt-local')?.checked ?? false;
     const remotes = document.getElementById('cred-opt-remotes')?.checked ?? true;
     const orgsVal = document.getElementById('cred-opt-orgs')?.value?.trim();
     const githubOrgs = orgsVal ? orgsVal.split(/[,;\s]+/).filter(Boolean) : [];
@@ -4051,12 +4143,6 @@ export function buildReportHtml(
               '<div class="hero-sub">Exposed active credentials grant unauthorized access. Revoke at the service provider immediately. Deleting files or commits does not revoke live keys.</div>' +
             '</div>' +
           '</div>' +
-          '<div class="hero-actions">' +
-            '<button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">' +
-              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
-              'Re-Scan' +
-            '</button>' +
-          '</div>' +
         '</div>';
     } else if (report.reviewCount > 0) {
       summaryBanner =
@@ -4068,12 +4154,6 @@ export function buildReportHtml(
               '<div class="hero-sub">Found keys (e.g. Google / Map API Keys) that may be public or unrestricted. Verify key restrictions in the respective provider console.</div>' +
             '</div>' +
           '</div>' +
-          '<div class="hero-actions">' +
-            '<button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">' +
-              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
-              'Re-Scan' +
-            '</button>' +
-          '</div>' +
         '</div>';
     } else {
       summaryBanner =
@@ -4084,12 +4164,6 @@ export function buildReportHtml(
               '<div class="hero-title">No exposed credentials or secrets detected</div>' +
               '<div class="hero-sub">Scanned workspace coverage — no token-shaped keys, private keys, or exposed credentials found.</div>' +
             '</div>' +
-          '</div>' +
-          '<div class="hero-actions">' +
-            '<button class="hero-rescan-btn" onclick="triggerCredentialScan()" title="Re-run credential scan">' +
-              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
-              'Re-Scan' +
-            '</button>' +
           '</div>' +
         '</div>';
     }
@@ -4136,7 +4210,7 @@ export function buildReportHtml(
             '</span>' +
           '</label>' +
           '<label class="cred-option-checkbox">' +
-            '<input type="checkbox" id="cred-opt-local" ' + (report.options?.scanLocal !== false ? 'checked' : '') + ' />' +
+            '<input type="checkbox" id="cred-opt-local" ' + (report.options?.scanLocal ? 'checked' : '') + ' />' +
             '<span class="opt-label-text">' +
               '<strong>Local &amp; Untracked Files (<code>--local</code>)</strong>' +
               '<span class="opt-sub">Check disk files (.env, .npmrc, untracked scripts)</span>' +
@@ -4162,45 +4236,67 @@ export function buildReportHtml(
       const isRev = t.severity === 'review';
       const isSafe = !!t.isSafe;
       const sevColor = isSafe ? 'var(--green)' : isCrit ? 'var(--red)' : isRev ? 'var(--yellow)' : 'var(--blue)';
-      const sevBg = isSafe ? 'var(--bg-green-soft)' : isCrit ? 'var(--bg-red-soft)' : isRev ? 'var(--bg-yellow-soft)' : 'var(--bg3)';
-      const sevBorder = isSafe ? 'rgba(74, 222, 128, 0.3)' : isCrit ? 'var(--border-red)' : isRev ? 'var(--border-yellow)' : 'var(--border)';
-      const sevText = isSafe ? 'SAFE' : isCrit ? 'CRITICAL SECRET' : isRev ? 'REVIEW REQUIRED' : 'INFO';
+      const sevText = isSafe ? 'SAFE' : isCrit ? 'CRITICAL' : isRev ? 'REVIEW REQUIRED' : 'INFO';
       const drawerId = 'cred-drawer-cred-' + idx;
       const drawerBtnId = 'cred-btn-drawer-cred-' + idx;
+      const fileIcon = t.locationType === 'history' ? '📜' : t.locationType === 'tracked' ? '🌐' : t.locationType === 'git-remote' ? '🔗' : t.locationType === 'github-alert' ? '☁️' : '📄';
+      const locTypes = (t.locationTypes && t.locationTypes.length > 0) ? t.locationTypes : [t.locationType];
+      const sourceBadgesHtml = locTypes.map(l => credentialLocationSourceBadgeClient(l, t.branch)).join(' <span class="source-plus">+</span> ');
+
+      const snippetTag = locTypes.length > 1
+        ? locTypes.map(l => l === 'tracked' ? '🌐 REMOTE (TRACKED BRANCH)' : l === 'history' ? '📜 REMOTE HISTORY' : l === 'local' ? '📄 LOCAL FILE' : l === 'git-remote' ? '🔗 GIT REMOTE' : '☁️ GITHUB ALERT').join(' • ')
+        : (t.locationType === 'history' ? '📜 REMOTE HISTORY CONTEXT' : t.locationType === 'tracked' ? '🌐 REMOTE (TRACKED BRANCH)' : t.locationType === 'git-remote' ? '🔗 GIT REMOTE URL (.GIT/CONFIG)' : t.locationType === 'github-alert' ? '☁️ REMOTE GITHUB ALERT' : '📄 LOCAL FILE CONTEXT');
 
       cardsHtml +=
-        '<div class="cred-card ' + (isSafe ? 'is-safe' : isCrit ? 'is-critical' : 'is-review') + '" id="cred-card-cred-' + idx + '" data-sev="' + escHtmlClient(t.severity) + '" data-safe="' + (isSafe ? 'true' : 'false') + '" data-location="' + escHtmlClient(t.locationType) + '" data-search="' + escHtmlClient(((t.ruleName || '') + ' ' + (t.file || '') + ' ' + (t.commit || '') + ' ' + (t.branch || '') + ' ' + (t.redactedValue || '') + ' ' + (t.fingerprint || '')).toLowerCase()) + '">' +
+        '<div class="cred-card ' + (isSafe ? 'is-safe' : isCrit ? 'is-critical' : 'is-review') + '" id="cred-card-cred-' + idx + '" tabindex="0" data-sev="' + escHtmlClient(t.severity) + '" data-safe="' + (isSafe ? 'true' : 'false') + '" data-location="' + escHtmlClient(locTypes.join(' ')) + '" data-search="' + escHtmlClient(((t.ruleName || '') + ' ' + (t.file || '') + ' ' + (t.commit || '') + ' ' + (t.branch || '') + ' ' + (t.redactedValue || '') + ' ' + (t.fingerprint || '') + ' ' + locTypes.join(' ') + ' ' + locTypes.map(l => credentialLocationLabelClient(l)).join(' ')).toLowerCase()) + '">' +
           '<div class="cred-card-left-bar" style="background:' + sevColor + '"></div>' +
           '<div class="cred-card-body">' +
             '<div class="cred-card-header">' +
               '<div class="cred-header-left">' +
-                '<span class="sev-pill" style="background:' + sevBg + ';color:' + sevColor + ';border:1px solid ' + sevBorder + '">' + sevText + '</span>' +
-                '<span class="cred-type-badge">' + escHtmlClient(t.ruleName) + '</span>' +
-                '<span class="cred-location-badge loc-' + escHtmlClient(t.locationType) + '">' + credentialLocationLabelClient(t.locationType) + '</span>' +
-              '</div>' +
-              '<div class="cred-header-right">' +
-                '<button class="cred-file-link-btn" data-file="' + escHtmlClient(t.file) + '" data-line="' + (t.line || 1) + '" data-location-type="' + escHtmlClient(t.locationType) + '" data-branch-commit="' + escHtmlClient(t.commit || t.branch || '') + '" onclick="openCredentialLocationBtn(this)" title="Open file in editor">' +
-                  '<span class="file-icon">📄</span>' +
-                  '<span class="file-name">' + escHtmlClient(t.file) + (t.line ? ':' + t.line : '') + '</span>' +
-                  (t.commit ? '<span class="commit-pill">commit: ' + escHtmlClient(t.commit) + '</span>' : '') +
-                  (t.branch ? '<span class="branch-pill">' + escHtmlClient(t.branch) + '</span>' : '') +
+                '<span class="sev-dot sev-' + escHtmlClient(t.severity) + '" title="' + sevText + '"></span>' +
+                '<span class="cred-title">' + escHtmlClient(t.ruleName) + '</span>' +
+                '<button class="cred-token-chip" data-value="' + escHtmlClient(t.rawValue || t.redactedValue) + '" onclick="copySecretChip(this)" title="Click to copy secret key (or press C)">' +
+                  '<span class="token-icon">🔑</span>' +
+                  '<span class="token-val">' + escHtmlClient(t.redactedValue) + '</span>' +
                 '</button>' +
               '</div>' +
-            '</div>' +
-            '<div class="cred-desc">' + escHtmlClient(t.description) + '</div>' +
-            '<div class="cred-value-box">' +
-              '<div class="cred-value-left">' +
-                '<span class="cred-value-label">MATCHED VALUE:</span>' +
-                '<code class="cred-value-code">' + escHtmlClient(t.redactedValue) + '</code>' +
-                '<span class="cred-fp-badge" title="SHA-256 Fingerprint">' + escHtmlClient(t.fingerprint) + '</span>' +
-              '</div>' +
-              '<div class="cred-value-actions">' +
-                '<button class="cred-copy-btn" data-value="' + escHtmlClient(t.redactedValue) + '" onclick="copyRedactedBtn(this)" title="Copy Redacted Value"><span class="btn-icon">📋</span> Copy Masked</button>' +
-                '<button class="cred-copy-btn" data-value="' + escHtmlClient(t.fingerprint) + '" onclick="copyFingerprintBtn(this)" title="Copy SHA-256 Fingerprint"><span class="btn-icon">🔑</span> Copy SHA-256</button>' +
+              '<div class="cred-header-right">' +
+                '<button class="cred-file-link-btn" data-file="' + escHtmlClient(t.file) + '" data-line="' + (t.line || 1) + '" data-location-type="' + escHtmlClient(t.locationType) + '" data-branch-commit="' + escHtmlClient(t.commit || t.branch || '') + '" onclick="openCredentialLocationBtn(this)" title="Jump to line ' + (t.line || 1) + ' in editor">' +
+                  '<span class="file-icon">' + fileIcon + '</span>' +
+                  '<span class="file-name">' + escHtmlClient(t.file) + (t.line ? ':' + t.line : '') + '</span>' +
+                  (t.commit ? '<span class="commit-pill">commit: ' + escHtmlClient(t.commit.slice(0, 8)) + '</span>' : '') +
+                  (t.branch ? '<span class="branch-pill">' + escHtmlClient(t.branch) + '</span>' : '') +
+                  '<span class="nav-arrow">↗</span>' +
+                '</button>' +
                 '<button class="cred-remediation-btn" id="' + drawerBtnId + '" data-drawer="' + drawerId + '" onclick="toggleRemediationDrawerBtn(this)"><span class="btn-icon">🛠️</span> Remediation Steps ▾</button>' +
               '</div>' +
             '</div>' +
-            (t.snippet ? '<div class="cred-snippet-wrap"><div class="cred-snippet-header"><span class="snippet-tag">Context Snippet</span></div><pre class="cred-snippet-pre">' + escHtmlClient(t.snippet) + '</pre></div>' : '') +
+            '<div class="cred-source-row">' +
+              '<span class="cred-source-label">Source:</span>' +
+              '<div class="cred-source-badges">' +
+                sourceBadgesHtml +
+              '</div>' +
+            '</div>' +
+            (t.snippet ?
+              '<div class="cred-snippet-wrap">' +
+                '<div class="cred-snippet-header">' +
+                  '<div class="snippet-header-left">' +
+                    '<span class="snippet-tag">' + snippetTag + '</span>' +
+                    '<span class="snippet-loc">' + escHtmlClient(t.file) + (t.line ? ':' + t.line : '') + '</span>' +
+                  '</div>' +
+                  '<div class="snippet-header-right">' +
+                    '<button class="cred-snippet-eye-btn" onclick="toggleSnippetSecret(this)" data-revealed="false" title="Show full key in code preview">' +
+                      '<span class="eye-icon">' +
+                        '<svg class="eye-open-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' +
+                        '<svg class="eye-closed-svg" style="display:none;" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' +
+                      '</span>' +
+                      '<span class="eye-text">Show Key</span>' +
+                    '</button>' +
+                  '</div>' +
+                '</div>' +
+                '<pre class="cred-snippet-pre" data-masked-snippet="' + escHtmlClient(t.snippet) + '" data-raw-snippet="' + escHtmlClient(t.rawSnippet || t.snippet) + '">' + escHtmlClient(t.snippet) + '</pre>' +
+              '</div>'
+            : '') +
             '<div class="cred-remediation-drawer" id="' + drawerId + '" style="display:none;">' +
               '<div class="remediation-inner">' +
                 '<div class="remediation-header">' +
@@ -4217,10 +4313,12 @@ export function buildReportHtml(
         '</div>';
     });
 
+    const clientMultiSourceCount = (report.findings || []).filter(f => (f.locationTypes?.length || 0) > 1).length;
+
     container.innerHTML =
-      summaryBanner +
       '<div class="branches-section" id="cred-results-wrapper">' +
         optionsToolbar +
+        summaryBanner +
         '<div class="branches-toolbar" style="margin-top: 16px;">' +
           '<div class="branches-toolbar-left">' +
             '<span class="branches-toolbar-title">Credential &amp; Secret Findings</span>' +
@@ -4238,11 +4336,12 @@ export function buildReportHtml(
             '<div class="filter-group">' +
               '<span class="filter-group-label">Source:</span>' +
               '<div class="filter-group-buttons">' +
-                '<button class="filter-tag active" data-cred-location="all" onclick="handleCredLocationFilterClick(this)">All</button>' +
-                (report.trackedCount > 0 ? '<button class="filter-tag" data-cred-location="tracked" onclick="handleCredLocationFilterClick(this)">💻 Tracked (' + report.trackedCount + ')</button>' : '') +
-                (report.historyCount > 0 ? '<button class="filter-tag" data-cred-location="history" onclick="handleCredLocationFilterClick(this)">📜 History (' + report.historyCount + ')</button>' : '') +
-                (report.localCount > 0 ? '<button class="filter-tag" data-cred-location="local" onclick="handleCredLocationFilterClick(this)">📄 Local .env (' + report.localCount + ')</button>' : '') +
-                (report.remotesCount > 0 ? '<button class="filter-tag" data-cred-location="git-remote" onclick="handleCredLocationFilterClick(this)">🌐 Remote (' + report.remotesCount + ')</button>' : '') +
+                '<button class="filter-tag active" data-cred-location="all" onclick="handleCredLocationFilterClick(this)">All (' + report.totalFindings + ')</button>' +
+                (clientMultiSourceCount > 0 ? '<button class="filter-tag" data-cred-location="multi" onclick="handleCredLocationFilterClick(this)">✨ Multi-Source (' + clientMultiSourceCount + ')</button>' : '') +
+                (report.trackedCount > 0 ? '<button class="filter-tag" data-cred-location="tracked" onclick="handleCredLocationFilterClick(this)">🌐 Remote: Tracked (' + report.trackedCount + ')</button>' : '') +
+                (report.historyCount > 0 ? '<button class="filter-tag" data-cred-location="history" onclick="handleCredLocationFilterClick(this)">📜 Remote History (' + report.historyCount + ')</button>' : '') +
+                (report.localCount > 0 ? '<button class="filter-tag" data-cred-location="local" onclick="handleCredLocationFilterClick(this)">📄 Local (' + report.localCount + ')</button>' : '') +
+                (report.remotesCount > 0 ? '<button class="filter-tag" data-cred-location="git-remote" onclick="handleCredLocationFilterClick(this)">🔗 Git Remotes (' + report.remotesCount + ')</button>' : '') +
                 (report.orgAlertsCount > 0 ? '<button class="filter-tag" data-cred-location="github-alert" onclick="handleCredLocationFilterClick(this)">☁️ Org Alert (' + report.orgAlertsCount + ')</button>' : '') +
               '</div>' +
             '</div>' +
@@ -4283,13 +4382,24 @@ export function buildReportHtml(
     applyCredFilters();
   }
 
+  function credentialLocationSourceBadgeClient(loc, branch) {
+    switch (loc) {
+      case 'tracked': return '<span class="cred-source-badge loc-tracked" title="Committed in branch' + (branch ? ': ' + escHtmlClient(branch) : '') + '">🌐 Remote (Tracked Branch' + (branch ? ': ' + escHtmlClient(branch) : '') + ')</span>';
+      case 'history': return '<span class="cred-source-badge loc-history" title="Found in Git commit history">📜 Remote History</span>';
+      case 'local': return '<span class="cred-source-badge loc-local" title="Found in local workspace file">📄 Local</span>';
+      case 'git-remote': return '<span class="cred-source-badge loc-git-remote" title="Found in .git/config remote URL">🔗 Git Remote</span>';
+      case 'github-alert': return '<span class="cred-source-badge loc-github-alert" title="Found in GitHub Secret Scanning alert">☁️ GitHub Alert</span>';
+      default: return '<span class="cred-source-badge loc-' + escHtmlClient(loc) + '">' + escHtmlClient(loc) + '</span>';
+    }
+  }
+
   function credentialLocationLabelClient(loc) {
     switch (loc) {
-      case 'tracked': return '💻 Tracked in Git';
-      case 'history': return '📜 Git Commit History';
-      case 'local': return '📄 Local File (.env/disk)';
-      case 'git-remote': return '🌐 Git Remote (.git/config)';
-      case 'github-alert': return '☁️ GitHub Alert';
+      case 'tracked': return '🌐 Remote (Tracked Branch)';
+      case 'history': return '📜 Remote History (Git Commit)';
+      case 'local': return '📄 Local (Disk / .env)';
+      case 'git-remote': return '🔗 Git Remote (.git/config)';
+      case 'github-alert': return '☁️ Remote (GitHub Org Alert)';
       default: return loc || '';
     }
   }
@@ -4327,27 +4437,94 @@ export function buildReportHtml(
     });
   }
 
-  function copyRedactedBtn(btn) {
-    const text = btn.getAttribute('data-value') || '';
-    try {
-      navigator.clipboard.writeText(text);
-    } catch (_) {}
-    vscode.postMessage({ action: 'copyText', text: text });
-    const orig = btn.innerHTML;
-    btn.innerHTML = '<span class="btn-icon">✓</span> Copied!';
-    setTimeout(() => { btn.innerHTML = orig; }, 1500);
+  function openCredentialSnippet(el) {
+    openCredentialLocationBtn(el);
   }
 
-  function copyFingerprintBtn(btn) {
+  function copySecretChip(btn) {
     const text = btn.getAttribute('data-value') || '';
+    if (!text) return;
     try {
       navigator.clipboard.writeText(text);
-    } catch (_) {}
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
     vscode.postMessage({ action: 'copyText', text: text });
-    const orig = btn.innerHTML;
-    btn.innerHTML = '<span class="btn-icon">✓</span> Copied!';
-    setTimeout(() => { btn.innerHTML = orig; }, 1500);
+    const valSpan = btn.querySelector('.token-val');
+    const iconSpan = btn.querySelector('.token-icon');
+    const origVal = valSpan ? valSpan.textContent : '';
+    const origIcon = iconSpan ? iconSpan.textContent : '🔑';
+    
+    btn.classList.add('copied');
+    if (iconSpan) iconSpan.textContent = '✓';
+    if (valSpan) valSpan.textContent = 'Copied!';
+    
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      if (iconSpan) iconSpan.textContent = origIcon;
+      if (valSpan) valSpan.textContent = origVal;
+    }, 1500);
   }
+  const copySecretBtn = copySecretChip;
+  const copyRedactedBtn = copySecretChip;
+
+  function toggleSnippetSecret(btn) {
+    const isRevealed = btn.getAttribute('data-revealed') === 'true';
+    const wrap = btn.closest('.cred-snippet-wrap');
+    if (!wrap) return;
+    const pre = wrap.querySelector('.cred-snippet-pre');
+    if (!pre) return;
+    
+    const maskedSnippet = pre.getAttribute('data-masked-snippet') || '';
+    const rawSnippet = pre.getAttribute('data-raw-snippet') || '';
+    const eyeText = btn.querySelector('.eye-text');
+    const openSvg = btn.querySelector('.eye-open-svg');
+    const closedSvg = btn.querySelector('.eye-closed-svg');
+    
+    if (isRevealed) {
+      btn.setAttribute('data-revealed', 'false');
+      btn.setAttribute('title', 'Show full key in code preview');
+      if (eyeText) eyeText.textContent = 'Show Key';
+      if (openSvg) openSvg.style.display = 'inline';
+      if (closedSvg) closedSvg.style.display = 'none';
+      pre.textContent = maskedSnippet;
+    } else {
+      btn.setAttribute('data-revealed', 'true');
+      btn.setAttribute('title', 'Hide full key');
+      if (eyeText) eyeText.textContent = 'Hide Key';
+      if (openSvg) openSvg.style.display = 'none';
+      if (closedSvg) closedSvg.style.display = 'inline';
+      pre.textContent = rawSnippet;
+    }
+  }
+
+  let activeHoveredCredCard = null;
+  document.addEventListener('mouseover', function(e) {
+    const card = e.target.closest ? e.target.closest('.cred-card') : null;
+    activeHoveredCredCard = card || null;
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (['input', 'textarea'].includes((document.activeElement?.tagName || '').toLowerCase())) return;
+    if (!activeHoveredCredCard) return;
+
+    if (e.key === 'c' || e.key === 'C') {
+      const copyBtn = activeHoveredCredCard.querySelector('.cred-token-chip');
+      if (copyBtn) {
+        copySecretChip(copyBtn);
+      }
+    } else if (e.key === 'Enter' || e.key === 'o' || e.key === 'O') {
+      const linkBtn = activeHoveredCredCard.querySelector('.cred-file-link-btn');
+      if (linkBtn) {
+        openCredentialLocationBtn(linkBtn);
+      }
+    }
+  });
 
   function toggleRemediationDrawerBtn(btn) {
     const drawerId = btn.getAttribute('data-drawer');
@@ -4405,11 +4582,19 @@ export function buildReportHtml(
 
     cards.forEach(card => {
       const sev = card.getAttribute('data-sev');
-      const loc = card.getAttribute('data-location');
+      const loc = card.getAttribute('data-location') || '';
+      const locList = loc.split(' ');
       const search = card.getAttribute('data-search') || '';
 
       const matchesSev = currentCredFilter === 'all' || sev === currentCredFilter;
-      const matchesLoc = currentCredLocation === 'all' || loc === currentCredLocation;
+      let matchesLoc = false;
+      if (currentCredLocation === 'all') {
+        matchesLoc = true;
+      } else if (currentCredLocation === 'multi') {
+        matchesLoc = locList.length > 1;
+      } else {
+        matchesLoc = locList.includes(currentCredLocation);
+      }
       const matchesSearch = !currentCredSearchQuery || search.includes(currentCredSearchQuery);
 
       if (matchesSev && matchesLoc && matchesSearch) {

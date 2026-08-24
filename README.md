@@ -2,75 +2,86 @@
   <img src="media/logo.png" width="160" height="160" alt="Guardian Logo" />
 </p>
 
-<h1 align="center">Guardian — Glassworm & Malware Scanner</h1>
+<h1 align="center">Guardian — Glassworm, Malware, Extension & Credential Scanner</h1>
 
 <p align="center">
-  <strong>Proactive Security, Glassworm Defense & Multi-Branch Git Threat Detection for VS Code Workspaces</strong>
+  <strong>Proactive DevSecOps Defense, Multi-Branch Git Malware Detection, Extension Threat Auditor & Secret Scanner for VS Code & Open VSX</strong>
 </p>
 
 <p align="center">
   <a href="https://marketplace.visualstudio.com/items?itemName=ankushlokhande.guardian-virus-scan"><img src="https://img.shields.io/visual-studio-marketplace/v/ankushlokhande.guardian-virus-scan?style=flat-square&color=38bdf8" alt="Marketplace Version" /></a>
+  <a href="https://open-vsx.org/extension/ankushlokhande/guardian-virus-scan"><img src="https://img.shields.io/badge/Open--VSX-v1.5.0-blue?style=flat-square" alt="Open VSX Version" /></a>
   <a href="https://marketplace.visualstudio.com/items?itemName=ankushlokhande.guardian-virus-scan"><img src="https://img.shields.io/visual-studio-marketplace/d/ankushlokhande.guardian-virus-scan?style=flat-square&color=f472b6" alt="Downloads" /></a>
   <img src="https://img.shields.io/github/license/ankush-ppie/guardian-virus-scan?style=flat-square&color=34d399" alt="License" />
-  <img src="https://img.shields.io/badge/Glassworm-Protected-emerald?style=flat-square" alt="Glassworm Protected" />
+  <img src="https://img.shields.io/badge/Glassworm-100%25%20Protected-emerald?style=flat-square" alt="Glassworm Protected" />
+  <img src="https://img.shields.io/badge/Offline-100%25%20Private-purple?style=flat-square" alt="Privacy First" />
 </p>
 
 ---
 
-## ⚡ What is Glassworm & Why Do You Need Guardian?
+## ⚡ What is the Glassworm Threat & Why Do You Need Guardian?
 
-The **Glassworm** malware campaign and modern supply-chain attacks specifically target developer machines by embedding stealth backdoors directly into workspace configurations and repository files.
+The **Glassworm** malware campaign and modern supply-chain attacks specifically target software developers by planting stealth backdoors directly inside workspace configurations, Git branches, and repository assets. 
 
-When you open an untrusted project or pull a branch, attackers exploit automated development workflows before you even run a single test:
+When you open an untrusted repository, switch branches, or pull a pull request, attackers exploit automated development workflows before you even execute your project:
 
-* 🪱 **Hidden Autorun Tasks**: Injected `.vscode/tasks.json` triggers that execute invisibly on folder open (`runOn: folderOpen`).
-* 🪱 **Fake Font Payloads**: Obfuscated JavaScript loaders disguised under font extensions like `fa-solid-400.woff2`, `.ttf`, or `.otf`.
-* 🪱 **Injected Framework Configs**: Padded malicious code appended to `postcss.config.mjs`, `next.config.js`, or `tailwind.config.js`.
-* 🪱 **Silent Git Propagation Scripts**: Batch helpers (`config.bat`) that backdate commits, amend histories, bypass hooks (`--no-verify`), and force-push malware to your remotes.
+* 🪱 **Hidden Autorun Tasks**: Injected `.vscode/tasks.json` directives that execute invisibly on folder open (`runOn: folderOpen`).
+* 🪱 **Fake Font Payloads**: Obfuscated JavaScript loaders disguised under innocent font extensions (`fa-solid-400.woff2`, `.ttf`, `.otf`).
+* 🪱 **Injected Framework Configs**: Malicious code silently appended to `postcss.config.mjs`, `next.config.js`, `tailwind.config.js`, or `vite.config.ts`.
+* 🪱 **Silent Git Propagation Scripts**: Batch and shell helpers (`config.bat`, push scripts) that backdate commit timestamps, amend histories, bypass hooks (`--no-verify`), and force-push malware to your upstream repositories.
+* 🪱 **Stealth Workspace Cloaking**: Malicious `.gitignore` configurations designed to hide itself or concealed payload scripts from version control.
 
-**Guardian** neutralizes this threat vector by scanning your active working tree and **every single local and remote-tracking Git branch** in the background — identifying threats before they can execute.
-
----
-
-## 🚀 Quick Start (Zero Configuration Required)
-
-1. **Auto-Scan on Open**: Guardian automatically runs a silent background scan whenever you open a project in VS Code.
-2. **Interactive Security Dashboard**:
-   - **Repo Scan** — Multi-branch Git scans, working-tree coverage, threat breakdown matrix, whitelisted safe rules, and quarantined code viewer.
-   - **Extension Scan** — Audits installed IDE extensions against 418+ malicious signatures, ForceMemo markers, and invisible-Unicode heuristics with 1-click removal.
-3. **Status Bar Access**: Look at the bottom status bar for the `🛡️ Guardian` shield indicator. Click it anytime to open the interactive security report.
-4. **Manual Commands**: Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and run:
-   ```
-   Guardian: Scan for Glassworm & Workspace Threats
-   Guardian: Open Glassworm & Security Report
-   Guardian: Scan Installed Extensions for Malware
-   ```
-5. **Interactive Remediation**: Inspect threat details, remove malicious extensions with 1-click **"Remove All"** or 1-by-1 uninstallation, view quarantined snippets in read-only virtual tabs, or whitelist internal rules with **Mark as Safe**.
+**Guardian** completely neutralizes these threats by providing **proactive, multi-layer security** across your entire Git repository, your installed IDE extensions, and your sensitive credentials.
 
 ---
 
-## 🛡️ Key Features
+## 🖥️ Interactive Security Dashboard (3 Dedicated Tabs)
 
-### 🪱 Repo Scan & Git Workspace Security
-* 🔍 **Multi-Branch & Ref Scanner**: Inspects all local branches and remote-tracking refs directly via safe Git object database reads with automatic non-blocking remote ref updates (`git fetch --all --prune`).
-* 🌳 **Working Tree & Untracked Coverage**: Detects ignored, untracked, and newly modified high-risk files in your active workspace before they are committed or executed.
-* 🎯 **Incident-Tested Glassworm Signatures**: Specific pattern recognition for confirmed Glassworm loader variants, fake font payloads, and amend/force-push propagation helpers.
-* 🔒 **Zero Workspace Disturbance**: Never checks out branches, never alters your working tree files or index, and opens threats in sandboxed read-only virtual viewers (`guardian-branch:/`).
-* 🛡️ **False-Positive Whitelisting**: Mark benign custom rules as Safe for **This Project** or **All Projects** globally with instant UI reclassification.
-* 📊 **Adaptive Project Detection**: Automatically optimizes threat rules for Flutter, Node.js, Next.js, Python, and Generic code repositories.
-
-### 📦 Extension Scan & Supply-Chain Defense
-* 🎯 **418+ Threat Database Signatures**: Audits installed extensions across VS Code, Antigravity IDE, Cursor, Windsurf, and Codium against known malware campaign IDs.
-* 🧬 **Deep Heuristic Analysis**: Inspects extension JavaScript bundles for ForceMemo wave markers (`lzcdrtfxyqiplpd`), invisible Unicode variation selectors (`U+FE00–U+FE0F`, `U+E0100–U+E01EF`), and proximity decoders.
-* 📡 **Live Radar Scanning Console**: Real-time visual scan progress with animated inspection ticker and instant threat alerts.
-* 🗑️ **One-Click Extension Remediation**: Remove all detected malicious extensions at once or uninstall them individually directly from the report view with cross-platform CLI support.
-* 🏷️ **Type Filters & Live Stats**: Quickly filter extensions by **User-Installed**, **Built-in**, **Infected**, or **Clean** with real-time statistics.
+Guardian brings a unified, state-of-the-art security cockpit right inside your editor with **three dedicated scan tabs**:
 
 ---
 
-## 🛑 Threat Detection Matrix
+### Tab 1: 🪱 Repo Scan — Multi-Branch Git & Workspace Defense
 
-Guardian defends against Glassworm campaign signatures, supply-chain vulnerabilities, and malicious workspace automation:
+![Guardian Repo Scan](media/screenshot-1A.png)
+
+* **Multi-Branch & Ref Scanner**: Inspects all local branches, remote-tracking refs, and tags directly via safe Git object database queries (`git show`, `git ls-tree`) with automatic non-blocking remote updates (`git fetch --all --prune`).
+* **Active Working Tree & Untracked Coverage**: Detects uncommitted modifications, untracked files, and suspicious ignored files in your active workspace before they get committed or run.
+* **Incident-Tested Glassworm Signatures**: Specific pattern matchers for confirmed Glassworm loader variants, fake font payloads, and amend/force-push propagation helpers.
+* **Safe Read-Only Sandboxed Viewer**: Click to inspect threats in virtual, read-only documents (`guardian-branch:/...`) so malicious scripts can never accidentally trigger or execute.
+* **False-Positive Whitelisting**: Mark benign custom rules as Safe for **This Project** or **All Projects** globally with instant UI reclassification.
+* **Adaptive Project Intelligence**: Automatically detects Flutter, Node.js, Next.js, Python, and generic repositories to tailor detection rules.
+
+---
+
+### Tab 2: 📦 Extension Scan — Supply-Chain & IDE Extension Auditor
+
+![Guardian Extension Scan](media/screenshot-2A.png)
+
+* **418+ Threat Database Signatures**: Audits all installed extensions across VS Code, Antigravity IDE, Cursor, Windsurf, and VSCodium against known compromised extensions and malicious campaign IDs.
+* **Deep Heuristic Analysis**: Inspects extension JavaScript bundles for ForceMemo wave markers (`lzcdrtfxyqiplpd`), invisible Unicode variation selectors (`U+FE00–U+FE0F`, `U+E0100–U+E01EF`), and proximity decoders.
+* **Live Radar Scanning Console**: Animated inspection ticker, real-time status counters, and instant threat alerts.
+* **1-Click Remediation**: Uninstall detected malicious extensions in bulk with a single click or manage them individually directly from the report view.
+* **Type & Status Filters**: Instantly filter by **User-Installed**, **Built-in System**, **Infected**, or **Clean** extensions.
+
+---
+
+### Tab 3: 🔑 Credential Scan — Deep Secret & API Key Detection
+
+![Guardian Credential Scan](media/screenshot-3A.png)
+
+* **Multi-Source Secret Detection**: Scans tracked branch tips, deep Git commit history (`--history`), local uncommitted files (`.env`, `.npmrc`, `.pem`), and `.git/config` remote URLs for leaked API keys, tokens, and private credentials.
+* **Single-Item Card Consolidation**: Automatically aggregates identical secrets discovered across multiple branches, commits, and files into a single unified finding card.
+* **1-Click Plaintext Clipboard Copy**: Click the token chip to copy the full unmasked key to the clipboard with instant `"✓ Copied!"` feedback while keeping on-screen text safely masked.
+* **In-Place Eye Toggle**: Reveal or hide unmasked secret values within syntax-highlighted code previews on demand.
+* **Remediation & History Purging**: Built-in remediation steps including provider revocation links and `git filter-repo` commands to permanently eradicate leaked secrets from Git history.
+* **100% Offline & Private**: Executes entirely locally on your machine. Secrets, code, and branch names never leave your computer.
+
+---
+
+## 🛑 Complete Threat Detection Matrix
+
+Guardian inspects your workspace against an extensive catalog of threat rules:
 
 | Threat Rule | Severity | Category | Target File / Area | Threat Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -97,38 +108,80 @@ Guardian defends against Glassworm campaign signatures, supply-chain vulnerabili
 
 ---
 
-## 🛠️ Installation
+## 🚀 Quick Start & Usage
 
-### From VS Code Marketplace
-1. Open VS Code and press `Ctrl+Shift+X` / `Cmd+Shift+X` to open Extensions.
-2. Search for **`Guardian`** or **`Glassworm`**.
-3. Click **Install**.
-
-### From VSIX
-1. Download the latest release `.vsix` from [GitHub Releases](https://github.com/ankush-ppie/guardian-virus-scan/releases).
-2. Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and choose:
-   ```
-   Extensions: Install from VSIX...
-   ```
-3. Select the `.vsix` file and reload VS Code.
+1. **Automatic Silent Scan**: Guardian automatically runs a non-intrusive background scan whenever a workspace is opened.
+2. **Status Bar Indicator**: Look at the bottom status bar for the `🛡️ Guardian` badge. Click it anytime to open the full interactive report.
+3. **Command Palette**: Press `Cmd+Shift+P` (macOS) or `Ctrl+Shift+P` (Windows/Linux) and run:
+   * `Guardian: Scan for Glassworm & Workspace Threats`
+   * `Guardian: Open Glassworm & Security Report`
+   * `Guardian: Scan Installed Extensions for Malware`
+   * `Guardian: Scan for Exposed Credentials & Secrets`
+4. **Instant Remediation**:
+   * **Mark as Safe**: Whitelist internal project rules with 1 click.
+   * **Inspect Safely**: Click any threat line to view quarantined code in a read-only tab.
+   * **Purge Leaks**: Follow built-in `git filter-repo` guides to purge exposed secrets.
+   * **Clean Extensions**: Uninstall suspicious or compromised extensions directly from the UI.
 
 ---
 
-## 💡 How It Works Under the Hood
+## 💡 How Guardian Works Under the Hood
 
-Guardian reads repository files directly from the Git object database without switching branches:
+Guardian uses a **Zero-Checkout Architecture** to safeguard your system:
 
 ```bash
+# Safe, non-invasive Git object inspection:
 git show <branch>:.vscode/tasks.json
 git ls-tree -r --name-only <branch>
 ```
 
-* **No Branch Switching**: Your working tree, stashes, and current branch state remain 100% untouched.
-* **Safe Read-Only Viewer**: When you click to inspect an infected file, Guardian opens a virtual, read-only document (`guardian-branch:/...`) so the malicious task cannot accidentally trigger.
+* **No Branch Switching**: Your current Git working tree, stashes, and branch remain completely undisturbed.
+* **Sandboxed Document Provider**: Files opened from infected branches are served via a custom virtual document scheme (`guardian-branch:/...`) that renders the code in a read-only buffer without triggering IDE task hooks or filesystem watchers.
 
 ---
 
-## 📋 Changelog & Version History
+## ⚙️ Configuration Options
+
+Customize Guardian via VS Code Settings (`settings.json`):
+
+```json
+{
+  // Automatically fetch remote branch metadata before scanning
+  "guardian.fetchRemotesBeforeScan": true
+}
+```
+
+---
+
+## 📦 Installation
+
+### From VS Code Marketplace
+1. Open VS Code and press `Ctrl+Shift+X` / `Cmd+Shift+X`.
+2. Search for **`Guardian`** or **`guardian-virus-scan`**.
+3. Click **Install**.
+
+### From Open VSX Registry
+Install directly in Open VSX-compatible editors (e.g., VSCodium, Eclipse Theia, Cursor, Windsurf, Antigravity IDE):
+```bash
+npx ovsx get ankushlokhande.guardian-virus-scan
+```
+
+### Manual VSIX Installation
+1. Download the latest `.vsix` release from [GitHub Releases](https://github.com/ankush-ppie/guardian-virus-scan/releases).
+2. Run in terminal or VS Code Command Palette:
+   ```bash
+   code --install-extension guardian-virus-scan-1.5.0.vsix
+   ```
+
+---
+
+## 🔍 Search & Index Keywords
+
+`guardian` • `guardian-virus-scan` • `gaurd-virus` • `gaurd` • `code-guardian` • `codeguardian` • `glassworm` • `glass-worm` • `glassworm-scanner` • `malware-scanner` • `virus-scan` • `pre-push` • `pre-push-hook` • `git-push` • `forbidden-patterns` • `force-push-protection` • `commit-amend` • `extension-auditor` • `extension-scan` • `credential-scan` • `secrets-scanner` • `supply-chain-security` • `devsecops` • `tasks-json` • `fake-font` • `stealth-terminal` • `injected-config` • `vscode-security` • `git-security`
+
+---
+
+## 📋 Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for full release notes and feature history.
 
@@ -136,4 +189,4 @@ See [CHANGELOG.md](CHANGELOG.md) for full release notes and feature history.
 
 ## ⚖️ License
 
-Distributed under the [MIT License](LICENSE).
+Distributed under the [MIT License](LICENSE). Copyright © 2026.
