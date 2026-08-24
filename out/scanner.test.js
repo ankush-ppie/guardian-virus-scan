@@ -41,6 +41,7 @@ const child_process_1 = require("child_process");
 const scanner_1 = require("./scanner");
 const report_1 = require("./report");
 const credentialScanner_1 = require("./credentialScanner");
+const emergencyInterceptor_1 = require("./emergencyInterceptor");
 function rules(threats) {
     return threats.map(t => t.rule).sort();
 }
@@ -692,6 +693,66 @@ async function testCredentialScanner() {
         fs.rmSync(root, { recursive: true, force: true });
     }
 }
+function testEmergencyInterceptor() {
+    // Test 1: Fake font autorun task on folder open
+    const maliciousTasksJson = `{
+    // Comments in tasks.json are allowed
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Font cache generator",
+        "command": "node ./public/fonts/fa-solid-400.woff2",
+        "presentation": { "reveal": "never", "hide": true },
+        "runOptions": { "runOn": "folderOpen" }
+      },
+      {
+        "label": "npm build",
+        "command": "npm run build"
+      }
+    ]
+  }`;
+    const threats = (0, emergencyInterceptor_1.detectHarmfulTasksFromContent)(maliciousTasksJson);
+    assert.strictEqual(threats.length, 1);
+    assert.strictEqual(threats[0].rule, 'KNOWN_FAKE_FONT_AUTORUN_TASK');
+    assert.strictEqual(threats[0].taskLabel, 'Font cache generator');
+    // Test 2: Stealth terminal task
+    const stealthTasksJson = `{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Background sync",
+        "command": "powershell -WindowStyle Hidden -Enc aW52b2tl",
+        "presentation": { "reveal": "never", "echo": false, "close": true }
+      }
+    ]
+  }`;
+    const stealthThreats = (0, emergencyInterceptor_1.detectHarmfulTasksFromContent)(stealthTasksJson);
+    assert.strictEqual(stealthThreats.length, 1);
+    assert.strictEqual(threats[0].rule, 'KNOWN_FAKE_FONT_AUTORUN_TASK');
+    // Test 3: Clean standard tasks (should not be flagged)
+    const cleanTasksJson = `{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Run tests",
+        "type": "shell",
+        "command": "npm test"
+      },
+      {
+        "label": "Watch TypeScript",
+        "type": "shell",
+        "command": "tsc -w",
+        "isBackground": true
+      }
+    ]
+  }`;
+    const cleanThreats = (0, emergencyInterceptor_1.detectHarmfulTasksFromContent)(cleanTasksJson);
+    assert.strictEqual(cleanThreats.length, 0);
+    // Test 4: Comment stripping utility
+    const withComments = `{\n  /* multi\n  line */\n  "test": true // trailing\n}`;
+    const stripped = (0, emergencyInterceptor_1.stripJsonComments)(withComments);
+    assert.strictEqual(JSON.parse(stripped).test, true);
+}
 async function runAllTests() {
     testInjectedConfigFamilies();
     testPropagationScript();
@@ -702,6 +763,7 @@ async function runAllTests() {
     await testSafeRulesPreferences();
     testExtensionAuditor();
     await testCredentialScanner();
+    testEmergencyInterceptor();
     console.log('Guardian scanner regression tests passed.');
 }
 runAllTests();

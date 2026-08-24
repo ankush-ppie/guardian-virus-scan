@@ -9,9 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=ankushlokhande.guardian-virus-scan"><img src="https://img.shields.io/visual-studio-marketplace/v/ankushlokhande.guardian-virus-scan?style=flat-square&color=38bdf8" alt="Marketplace Version" /></a>
-  <a href="https://open-vsx.org/extension/ankushlokhande/guardian-virus-scan"><img src="https://img.shields.io/badge/Open--VSX-v1.5.0-blue?style=flat-square" alt="Open VSX Version" /></a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=ankushlokhande.guardian-virus-scan"><img src="https://img.shields.io/visual-studio-marketplace/d/ankushlokhande.guardian-virus-scan?style=flat-square&color=f472b6" alt="Downloads" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=ankushlokhande.guardian-virus-scan"><img src="https://img.shields.io/badge/VS_Code-v1.5.1-007ACC?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
+  <a href="https://open-vsx.org/extension/ankushlokhande/guardian-virus-scan"><img src="https://img.shields.io/badge/Open--VSX-v1.5.1-blue?style=flat-square" alt="Open VSX Version" /></a>
   <img src="https://img.shields.io/github/license/ankush-ppie/guardian-virus-scan?style=flat-square&color=34d399" alt="License" />
   <img src="https://img.shields.io/badge/Glassworm-100%25%20Protected-emerald?style=flat-square" alt="Glassworm Protected" />
   <img src="https://img.shields.io/badge/Offline-100%25%20Private-purple?style=flat-square" alt="Privacy First" />
@@ -51,6 +50,15 @@ Guardian brings a unified, state-of-the-art security cockpit right inside your e
 * **Safe Read-Only Sandboxed Viewer**: Click to inspect threats in virtual, read-only documents (`guardian-branch:/...`) so malicious scripts can never accidentally trigger or execute.
 * **False-Positive Whitelisting**: Mark benign custom rules as Safe for **This Project** or **All Projects** globally with instant UI reclassification.
 * **Adaptive Project Intelligence**: Automatically detects Flutter, Node.js, Next.js, Python, and generic repositories to tailor detection rules.
+
+#### 🚨 Emergency Startup Interceptor & Task Terminator (In Action)
+
+![Guardian Emergency Interceptor Alert Modal](media/screenshot-1B.png)
+
+* **Zero-Delay Startup Interception (0ms)**: Guardian activates the exact millisecond a workspace with `.vscode/tasks.json` is opened.
+* **Immediate Process Termination**: Automatically kills active task processes (`execution.terminate()`) and disposes background stealth terminals (`terminal.dispose()`).
+* **Automatic Re-Execution Lockdown**: Automatically sets `task.allowAutomaticTasks: off` in workspace configuration to block background restarts.
+* **Emergency Alert Modal**: Directly displays the intercepted command, rule name, and description with 1-click access to the Security Report.
 
 ---
 
@@ -170,7 +178,7 @@ npx ovsx get ankushlokhande.guardian-virus-scan
 1. Download the latest `.vsix` release from [GitHub Releases](https://github.com/ankush-ppie/guardian-virus-scan/releases).
 2. Run in terminal or VS Code Command Palette:
    ```bash
-   code --install-extension guardian-virus-scan-1.5.0.vsix
+   code --install-extension guardian-virus-scan-1.5.1.vsix
    ```
 
 ---

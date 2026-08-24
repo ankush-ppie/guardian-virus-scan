@@ -2,6 +2,24 @@
 
 All notable changes to the **Guardian Virus Scan** extension will be documented in this file.
 
+## [1.5.1] - 2026-08-24
+
+### Added
+- **Emergency Startup Interceptor & Live Task Terminator**:
+  - **Zero-Delay Startup Interception**: Synchronously inspects `.vscode/tasks.json` and `.vscode/settings.json` on workspace folder open (0ms delay).
+  - **Active Task & Terminal Termination**: Automatically terminates active malicious task executions (`vscode.tasks.taskExecutions`) and disposes stealth background terminals (`terminal.dispose()`).
+  - **Automatic Task Lockdown**: Automatically updates workspace configuration `task.allowAutomaticTasks: off` upon detecting malicious autorun configurations to prevent silent re-execution.
+  - **Emergency Alert Modal**: Urgent modal dialog showing threat details (task label, malicious command, rule, and description) with direct navigation to the Security Report.
+  - **Live Runtime Task Listener**: Subscribes to `vscode.tasks.onDidStartTask` to catch and terminate harmful task executions dynamically at runtime.
+
+- **Instant Activation Triggers**:
+  - Added `workspaceContains:**/.vscode/tasks.json` and `workspaceContains:**/.vscode/settings.json` activation events so Guardian wakes up the exact millisecond a folder is opened.
+
+- **Documentation & Marketplace Updates**:
+  - Added screenshots for all 3 scan tabs (**Repo Scan** `screenshot-1A.png`, **Extension Scan** `screenshot-2A.png`, and **Credential Scan** `screenshot-3A.png`).
+  - Added real-world screenshot demonstrating the **Emergency Startup Interceptor & Task Terminator Alert Modal** (`screenshot-1B.png`).
+  - Expanded search keywords and tags for enhanced discoverability across VS Code Marketplace and Open VSX Registry.
+
 ## [1.5.0] - 2026-08-21
 
 ### Added

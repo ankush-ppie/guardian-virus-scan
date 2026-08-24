@@ -31,6 +31,11 @@ import {
   exportCredentialJson,
   exportCredentialMarkdown,
 } from './credentialScanner';
+import {
+  inspectAndTerminateHarmfulExecution,
+  isTaskHarmful,
+  EmergencyInterceptResult,
+} from './emergencyInterceptor';
 
 let reportPanel: vscode.WebviewPanel | undefined;
 let latestResult: WorkspaceScanResult | undefined;
@@ -567,6 +572,67 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider('guardian-branch', {
       provideTextDocumentContent: uri => virtualDocuments.get(uri.toString()) ?? '',
+    })
+  );
+
+  // ── Immediate Emergency Interception (0ms delay on startup) ────────────────
+  async function checkAndInterceptEmergency() {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders?.length) return;
+
+    for (const folder of folders) {
+      try {
+        const interceptResult = await inspectAndTerminateHarmfulExecution(folder.uri.fsPath);
+        if (interceptResult && interceptResult.threats.length > 0) {
+          const primary = interceptResult.threats[0];
+          const count = interceptResult.threats.length;
+          const detailMsg =
+            `Guardian detected and immediately stopped a harmful autorun execution on folder open:\n\n` +
+            `• Task: "${primary.taskLabel}"\n` +
+            `• Command: "${primary.command || 'N/A'}"\n` +
+            `• Rule: [${primary.rule}]\n` +
+            `• Description: ${primary.detail}\n\n` +
+            `🛑 Execution terminated. Automatic task execution has been disabled (task.allowAutomaticTasks: off) to protect your workspace.`;
+
+          vscode.window.showErrorMessage(
+            `🚨 GUARDIAN DEFENSE: Malicious Autorun Task Intercepted & Stopped! (${count} threat${count !== 1 ? 's' : ''})`,
+            { modal: true, detail: detailMsg },
+            '📄 View Security Report'
+          ).then(choice => {
+            if (choice === '📄 View Security Report') {
+              vscode.commands.executeCommand('guardian.openReport');
+            }
+          });
+          break;
+        }
+      } catch {
+        // Non-blocking fallback
+      }
+    }
+  }
+
+  // Execute emergency check immediately at startup (0ms)
+  checkAndInterceptEmergency();
+
+  // ── Live Runtime Task Interceptor ──────────────────────────────────────────
+  context.subscriptions.push(
+    vscode.tasks.onDidStartTask(e => {
+      try {
+        const check = isTaskHarmful(e.execution.task);
+        if (check.isHarmful && check.threat) {
+          e.execution.terminate();
+          vscode.window.showErrorMessage(
+            `🚨 GUARDIAN DEFENSE: Harmful task execution "${check.threat.taskLabel}" was stopped! (${check.threat.detail})`,
+            '📄 View Security Report'
+          ).then(choice => {
+            if (choice === '📄 View Security Report') {
+              vscode.commands.executeCommand('guardian.openReport');
+            }
+          });
+        }
+      } catch {
+        // Non-blocking fallback
+      }
     })
   );
 
