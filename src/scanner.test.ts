@@ -5,6 +5,7 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import {
   scanBranch,
+  scanObfuscatedJavaScript,
   scanInjectedConfig,
   scanPropagationScript,
   scanWorkingTree,
@@ -45,6 +46,55 @@ function testInjectedConfigFamilies(): void {
 
   const legitimate = `import { globalIgnores } from 'eslint/config';\nexport default [globalIgnores(['.next/**'])];\n`;
   assert.deepStrictEqual(scanInjectedConfig(legitimate, 'eslint.config.mjs'), []);
+}
+
+// Inert text fixture: no executable payload or real incident code is included.
+const esmLoaderFixture = [
+  'import {createRequire} from "module"; const require=createRequire(import.meta.url);',
+  "global['!']='fixture';",
+  "while(!![]){table['push'](table['shift']());}",
+  'new Uint8Array(bytes); new TextDecoder();',
+  `const encoded='${'ab'.repeat(600)}';`,
+].join('\n');
+
+function testObfuscatedJavaScript(): void {
+  const found = scanObfuscatedJavaScript(esmLoaderFixture, 'api.js');
+  assert.deepStrictEqual(rules(found), ['OBFUSCATED_ESM_LOADER']);
+  assert.strictEqual(found[0].line, 2);
+  assert.strictEqual(found[0].severity, 'critical');
+  assert.deepStrictEqual(scanObfuscatedJavaScript(
+    'import {createRequire} from "module"; const require=createRequire(import.meta.url);', 'api.js'), []);
+  // Each component is required; ordinary decoding or minification is insufficient.
+  for (const line of esmLoaderFixture.split('\n')) {
+    assert.deepStrictEqual(scanObfuscatedJavaScript(esmLoaderFixture.replace(line, ''), 'api.js'), []);
+  }
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'guardian-esm-test-'));
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
+  try {
+    git('init', '-q', '-b', 'main');
+    git('config', 'user.name', 'Guardian Test');
+    git('config', 'user.email', 'guardian@example.invalid');
+    git('config', 'commit.gpgsign', 'false');
+    fs.writeFileSync(path.join(root, 'api.js'), esmLoaderFixture);
+    git('add', '.');
+    git('commit', '-qm', 'inert loader fixture');
+    git('update-ref', 'refs/remotes/origin/infected', 'HEAD');
+    git('rm', 'api.js');
+    fs.writeFileSync(path.join(root, '.gitignore'), 'api.js\n');
+    git('add', '.');
+    git('commit', '-qm', 'remove fixture');
+    assert.deepStrictEqual(scanBranch(root, 'main', 'main', 'node').threats, []);
+    assert.ok(rules(scanBranch(root, 'origin/infected', 'main', 'node').threats).includes('OBFUSCATED_ESM_LOADER'));
+    assert.deepStrictEqual(scanWorkingTree(root, 'main', 'node').threats, []);
+    fs.writeFileSync(path.join(root, 'api.js'), esmLoaderFixture);
+    assert.ok(rules(scanWorkingTree(root, 'main', 'node').threats).includes('OBFUSCATED_ESM_LOADER'));
+    fs.mkdirSync(path.join(root, 'lib'));
+    fs.writeFileSync(path.join(root, 'lib', 'renamed.cjs'), esmLoaderFixture);
+    assert.ok(scanWorkingTree(root, 'main', 'node').threats.some(t => t.file === 'lib/renamed.cjs'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
 function testPropagationScript(): void {
@@ -846,6 +896,7 @@ function testEmergencyInterceptor(): void {
 
 async function runAllTests() {
   testInjectedConfigFamilies();
+  testObfuscatedJavaScript();
   testPropagationScript();
   testWorkingTreeCoverage();
   testRemoteTrackingRefCoverage();

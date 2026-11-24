@@ -47,6 +47,7 @@ exports.readBinaryFromBranch = readBinaryFromBranch;
 exports.listFilesInBranch = listFilesInBranch;
 exports.detectProjectType = detectProjectType;
 exports.scanInjectedConfig = scanInjectedConfig;
+exports.scanObfuscatedJavaScript = scanObfuscatedJavaScript;
 exports.scanPropagationScript = scanPropagationScript;
 exports.scanWorkingTree = scanWorkingTree;
 exports.scanBranch = scanBranch;
@@ -272,6 +273,21 @@ function scanInjectedConfig(content, filePath) {
     }
     return [];
 }
+/** Composite signature for the obfuscated ESM loader found in Kisan-Scan api.js.
+ * Inspect text only: never evaluate its decoder or generated functions.
+ */
+function scanObfuscatedJavaScript(content, filePath) {
+    const bootstrap = /\bcreateRequire\s*\(\s*import\.meta\.url\s*\)/.test(content);
+    const marker = /\bglobal\s*\[\s*['"]!['"]\s*\]\s*=/;
+    const hexPayload = /['"][a-f0-9]{1024,}['"]/i.test(content);
+    const decoder = /\bnew\s+Uint8Array\b/.test(content) && /\bnew\s+TextDecoder\b/.test(content);
+    const rotation = /\bwhile\s*\(\s*!!\[\]\s*\)/.test(content) &&
+        /\[\s*['"]push['"]\s*\]/.test(content) && /\[\s*['"]shift['"]\s*\]/.test(content);
+    if (!(bootstrap && marker.test(content) && hexPayload && decoder && rotation))
+        return [];
+    return [threatAt(content, filePath, 'critical', 'OBFUSCATED_ESM_LOADER', 'Obfuscated JavaScript loader matching the api.js incident: createRequire bootstrap, global marker, rotated string table, and a large hex payload decoded through Uint8Array/TextDecoder.', marker)];
+}
+const JAVASCRIPT_SOURCE = /\.(?:[cm]?js|[cm]?ts|jsx|tsx)$/i;
 /** Detect the batch helper used to amend, backdate, and force-push commits. */
 function scanPropagationScript(content, filePath) {
     const amendsCommit = /git\s+commit\s+--amend/i.test(content);
@@ -580,6 +596,7 @@ function scanWorkingTree(workspacePath, currentBranch, projectType) {
             const base = entry.name.toLowerCase();
             const isVsCodeConfig = /(^|\/)\.vscode\/(tasks|settings|launch)\.json$/i.test(relativePath);
             const isExecutableConfig = /^(postcss|next|tailwind)\.config\.(js|mjs|cjs|ts)$/i.test(entry.name);
+            const isJavaScript = JAVASCRIPT_SOURCE.test(entry.name);
             const isPropagationScript = base === 'config.bat';
             const isGitignore = base === '.gitignore';
             const isFlutterConfig = projectType === 'flutter' && (base === 'pubspec.yaml' || base === 'build.yaml');
@@ -593,7 +610,7 @@ function scanWorkingTree(workspacePath, currentBranch, projectType) {
                     threats.push(threat);
                 continue;
             }
-            if (!(isVsCodeConfig || isExecutableConfig || isPropagationScript || isGitignore || isFlutterConfig))
+            if (!(isVsCodeConfig || isExecutableConfig || isJavaScript || isPropagationScript || isGitignore || isFlutterConfig))
                 continue;
             let content;
             try {
@@ -606,6 +623,8 @@ function scanWorkingTree(workspacePath, currentBranch, projectType) {
                 continue;
             }
             scannedFiles.push(relativePath);
+            if (isJavaScript)
+                threats.push(...scanObfuscatedJavaScript(content, relativePath));
             if (/(^|\/)\.vscode\/tasks\.json$/i.test(relativePath))
                 threats.push(...scanTasksJson(content, relativePath));
             else if (/(^|\/)\.vscode\/settings\.json$/i.test(relativePath))
@@ -691,11 +710,13 @@ function scanBranch(workspacePath, branch, currentBranch, projectType) {
     const executableConfigName = /^(postcss|next|tailwind)\.config\.(?:js|mjs|cjs|ts)$/i;
     for (const fp of allFiles) {
         const baseName = path.basename(fp);
-        if (executableConfigName.test(baseName)) {
+        if (JAVASCRIPT_SOURCE.test(baseName)) {
             const content = readFileFromBranch(workspacePath, branch, fp);
             if (content !== null) {
                 scannedFiles.push(fp);
-                threats.push(...scanInjectedConfig(content, fp));
+                threats.push(...scanObfuscatedJavaScript(content, fp));
+                if (executableConfigName.test(baseName))
+                    threats.push(...scanInjectedConfig(content, fp));
             }
             continue;
         }

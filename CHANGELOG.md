@@ -2,6 +2,12 @@
 
 All notable changes to the **Guardian Virus Scan** extension will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Detect the obfuscated ESM loader found in the Kisan-Scan `api.js` incident, including renamed JavaScript/TypeScript files in branch tips and ignored or untracked working-tree files.
+- Regression coverage for deleted payloads retained on remote-tracking branches and legitimate `createRequire` usage.
+
 ## [1.5.1] - 2026-08-24
 
 ### Added
