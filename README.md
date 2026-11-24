@@ -198,3 +198,9 @@ See [CHANGELOG.md](CHANGELOG.md) for full release notes and feature history.
 ## ⚖️ License
 
 Distributed under the [MIT License](LICENSE). Copyright © 2026.
+
+### Obfuscated JavaScript loaders
+
+Guardian checks JavaScript and TypeScript source files for the composite loader signature observed in the Kisan-Scan `api.js` incident. This includes local and remote-tracking branch tips and ignored/untracked working-tree files (subject to the scanner's size limits and excluded generated/dependency directories). Normal `createRequire` usage alone is not flagged.
+
+Deleting a file and committing removes it from that branch's current tree, but older commits and other branches can retain it. The malware scan checks branch tips, not every historical commit. A Git history editor can therefore display a deleted file even when it no longer exists on disk. Remote-tracking results reflect locally available refs, or fetched refs when fetching is enabled and succeeds.
